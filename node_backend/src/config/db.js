@@ -25,7 +25,8 @@ const connectDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user'
             )`, (err) => {
                 if (err) {
                     console.error('Error creating users table:', err.message);

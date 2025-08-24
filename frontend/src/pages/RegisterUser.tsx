@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types/user';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft } from 'lucide-react';
 
 export default function RegisterUser() {
@@ -52,9 +53,20 @@ export default function RegisterUser() {
     );
   }
 
+  const { toast } = useToast();
+
   const handleSuccess = () => {
-    // You can add any success handling here
-    // For example, show a success message or redirect
+    // Show success toast
+    toast({
+      title: 'Success',
+      description: 'User created successfully!',
+      duration: 2000, // 2 seconds
+    });
+    
+    // Redirect to dashboard after a short delay
+    setTimeout(() => {
+      navigate('/dashboard');
+    }, 1000);
   };
 
   return (

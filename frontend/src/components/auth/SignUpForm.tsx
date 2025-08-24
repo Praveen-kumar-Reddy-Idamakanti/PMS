@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole, CreateUserDto, canCreateUser } from '@/types/user';
+import { registerUser } from '@/services/auth.service';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import {
@@ -67,8 +68,14 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
 
     setIsLoading(true);
     try {
-      // Replace with your API call
-      // await authService.registerUser(values);
+      // Call the registerUser function from auth service
+      await registerUser({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        employeeId: values.employeeId,
+        role: values.role
+      });
       
       toast({
         title: 'User created successfully',
@@ -77,11 +84,11 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
       
       form.reset();
       onSuccess?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating user:', error);
       toast({
         title: 'Error creating user',
-        description: 'Please try again later.',
+        description: error.message || 'Please try again later.',
         variant: 'destructive',
       });
     } finally {
@@ -122,7 +129,7 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
-                  <Input type="email" placeholder="john@example.com" {...field} />
+                  <Input type="email" placeholder="mama@example.com" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

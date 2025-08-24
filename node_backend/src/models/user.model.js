@@ -3,19 +3,25 @@ const { getDB } = require('../config/db');
 
 class User {
     static async create(userData) {
-        const { name, email, password } = userData;
+        const { name, email, password, role = 'user' } = userData; // Default role to 'user' if not provided
         const db = getDB();
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         return new Promise((resolve, reject) => {
-            const stmt = db.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
-            stmt.run(name, email, hashedPassword, function (err) {
+            const stmt = db.prepare('INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)');
+            stmt.run(name, email, hashedPassword, role, function (err) {
                 if (err) {
+                    console.error('Error creating user:', err);
                     return reject(err);
                 }
-                resolve({ id: this.lastID, name, email });
+                resolve({ 
+                    id: this.lastID, 
+                    name, 
+                    email, 
+                    role 
+                });
             });
             stmt.finalize();
         });

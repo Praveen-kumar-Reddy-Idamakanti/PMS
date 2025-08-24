@@ -10,7 +10,7 @@ const sendResponse = (res, status, success, message, data = null) => {
 };
 
 exports.register = async (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, role = 'user' } = req.body; // Default to 'user' role if not provided
 
     try {
         // Check if user already exists
@@ -23,7 +23,7 @@ exports.register = async (req, res) => {
         }
 
         // Create new user
-        user = await User.create({ name, email, password });
+        user = await User.create({ name, email, password, role });
         if (!user) {
             return res.status(500).json({
                 success: false,
