@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import * as authService from '@/services/auth.service';
@@ -31,16 +31,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   const checkAuth = useCallback(async (): Promise<User | null> => {
-    setLoading(true);
     const token = getAuthToken();
     
     if (!token) {
-      setLoading(false);
+      // If no token, clear any existing user data
+      localStorage.removeItem('user');
       setUser(null);
       return null;
     }
 
     try {
+      // First try to get user from localStorage if available
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        // If we have a valid stored user, use it while we verify with the server
+        setUser(parsedUser);
+      }
+      
+      // Then verify with the server
       const user = await authService.getCurrentUser();
       
       if (user) {
@@ -50,22 +59,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: user.email,
           isAuthenticated: true,
         };
+        // Update both state and localStorage
         setUser(userData);
-        setLoading(false);
+        localStorage.setItem('user', JSON.stringify(userData));
         return userData;
       }
       
-      // If we got here, the token might be invalid
-      localStorage.removeItem('token');
-      setUser(null);
-      setLoading(false);
-      return null;
+      // If we got here, the token is invalid
+      throw new Error('Invalid or expired token');
       
     } catch (error) {
       console.error('Failed to verify token:', error);
+      // Clear invalid data
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       setUser(null);
-      setLoading(false);
       return null;
     }
   }, []);
@@ -73,15 +81,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check authentication status on initial load and when path changes
   useEffect(() => {
     let mounted = true;
+    let isChecking = false;
 
     const verifyAuth = async () => {
-      if (!mounted) return;
-
+      // Prevent multiple simultaneous auth checks
+      if (isChecking || !mounted) return;
+      
+      isChecking = true;
       const currentPath = location.pathname;
-      const isAuthRoute = currentPath === '/login' || currentPath === '/register';
-      const isPublicRoute = isAuthRoute || currentPath === '/';
+      const isAuthRoute = currentPath === '/login' || currentPath === '/';
+      const isPublicRoute = isAuthRoute;
+      const token = localStorage.getItem('token');
 
       try {
+        if (!mounted) return;
+        
+        // If no token and not on a public route, redirect to login
+        if (!token) {
+          if (!isPublicRoute) {
+            navigate('/login', { 
+              replace: true,
+              state: { from: location }
+            });
+          }
+          return;
+        }
+        
+        // If we have a token, verify it
         setLoading(true);
         const user = await checkAuth();
 
@@ -96,11 +122,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
           }
         } else {
-          // If user is not logged in and not on a public route, redirect to login
+          // Clear invalid token and redirect to login if not on a public route
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+          
           if (!isPublicRoute) {
             navigate('/login', { 
               replace: true,
-              state: { from: location }
+              state: { 
+                from: location,
+                error: 'Your session has expired. Please log in again.'
+              }
             });
           }
         }
@@ -108,8 +141,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Auth verification error:', error);
         if (!mounted) return;
 
-        // Clear any invalid token
+        // Clear any invalid data
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         setUser(null);
 
         // Only redirect if not already on a public route
@@ -125,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         if (mounted) {
           setLoading(false);
+          isChecking = false;
         }
       }
     };
@@ -145,12 +180,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       const user = await authService.login({ email, password });
       
-      setUser({
+      if (!user) {
+        throw new Error('No user data received');
+      }
+      
+      const userData = {
         id: user.id,
         name: user.name,
         email: user.email,
         isAuthenticated: true
-      });
+      };
+      
+      // Update the user state
+      setUser(userData);
+      
+      // Store user data in localStorage for persistence
+      localStorage.setItem('user', JSON.stringify(userData));
       
       toast({
         title: 'Login successful',
@@ -158,13 +203,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         variant: 'default',
       });
       
-      // Redirect to the intended URL or home
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      // Don't navigate here - let the useEffect handle the redirect
       return true;
     } catch (error) {
       console.error('Login error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An error occurred during login';
+      
+      // Clear any invalid tokens
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
       
       toast({
         title: 'Login failed',
@@ -172,21 +220,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         variant: 'destructive',
       });
       
-      // Clear any invalid token
-      if (error instanceof Error && error.message.includes('token')) {
-        localStorage.removeItem('token');
-      }
-      
       return false;
     } finally {
       setLoading(false);
     }
-  }, [navigate, toast, location.state]);
+  }, [toast]);
 
   const logout = useCallback(async () => {
     try {
+      // Call the server-side logout first
+      await authService.logout();
+    } catch (error) {
+      console.warn('Non-critical error during server logout:', error);
+      // Continue with client-side cleanup even if server logout fails
+    } finally {
       // Clear all auth-related data
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       document.cookie = 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
       
       // Reset user state
@@ -198,22 +248,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: 'You have been successfully logged out.',
       });
       
-      // Navigate to login page
-      navigate('/login', { replace: true });
-      
-    } catch (error) {
-      console.error('Error during logout:', error);
-      // Fallback to full page reload on error
-      navigate('/login', { replace: true });
+      // Force a full page reload to reset all states
+      window.location.href = '/login';
     }
-  }, [toast, navigate]);
+  }, [toast]);
 
-  const contextValue = {
-    user: user,
-    loading: loading,
-    login: login,
-    logout: logout,
-  };
+  const contextValue = useMemo(() => ({
+    user,
+    loading,
+    login,
+    logout,
+  }), [user, loading, login, logout]);
 
   return (
     <AuthContext.Provider value={contextValue}>

@@ -26,14 +26,15 @@ api.interceptors.request.use(
   }
 );
 
-// Add a response interceptor to handle 401 responses
+// Add a response interceptor to handle errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized - maybe redirect to login
+      // Clear the invalid token
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Don't redirect here - let the AuthContext handle it
+      console.log('Session expired - please log in again');
     }
     return Promise.reject(error);
   }

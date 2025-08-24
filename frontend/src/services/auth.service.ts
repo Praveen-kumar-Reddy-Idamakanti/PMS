@@ -89,32 +89,34 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
     const response = await api.get<GetCurrentUserResponse>('/auth/user');
     
-    if (response.data.success && response.data.user) {
+    if (response.data?.success && response.data.user) {
       return response.data.user;
     }
     
-    // If the token is invalid, clear it
-    localStorage.removeItem('token');
-    return null;
-  } catch (error) {
+    // If the response doesn't contain user data, the token might be invalid
+    throw new Error('Invalid user data received');
+    
+  } catch (error: any) {
     console.error('Error fetching current user:', error);
     
-    const err = error as ErrorResponse;
-    
-    // If the error is 401 (Unauthorized) or 403 (Forbidden), clear the token
-    if (err.response?.status === 401 || err.response?.status === 403) {
+    // Handle different types of errors
+    if (error.response) {
+      // Server responded with an error status code
+      if (error.response.status === 401) {
+        localStorage.removeItem('token');
+        throw new Error('Your session has expired. Please log in again.');
+      } else if (error.response.status >= 500) {
+        console.error('Server error:', error);
+        throw new Error('Unable to fetch user information. Please try again later.');
+      }
+    } else if (error.message === 'Network Error') {
+      // Network error
       localStorage.removeItem('token');
-      return null;
+      throw new Error('Unable to connect to the server. Please check your connection.');
     }
     
-    // For server errors, log the full error but don't expose details to the user
-    if (err.response?.status && err.response.status >= 500) {
-      console.error('Server error:', error);
-      throw new Error('Unable to fetch user information. Please try again later.');
-    }
-    
-    // For other errors, just return null
-    return null;
+    // For other errors, re-throw with a generic message
+    throw new Error('An error occurred while fetching user information');
   }
 };
 
