@@ -191,10 +191,15 @@ export default function Dashboard() {
         {/* Welcome Section */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Welcome back, {user.name}! 👋
-            </h2>
-            <p className="text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-foreground">
+                Welcome back, {user.name}! 👋
+              </h2>
+              <Badge variant="outline" className="px-2 py-1 text-xs">
+                {user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()}
+              </Badge>
+            </div>
+            <p className="text-muted-foreground mt-1">
               {format(new Date(), 'EEEE, MMMM do, yyyy')}
             </p>
           </div>
