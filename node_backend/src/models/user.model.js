@@ -24,9 +24,13 @@ class User {
     static findByEmail(email) {
         const db = getDB();
         return new Promise((resolve, reject) => {
-            db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
+            db.get('SELECT id, name, email, password, role FROM users WHERE email = ?', [email], (err, row) => {
                 if (err) {
                     return reject(err);
+                }
+                // Ensure role has a default value if not set
+                if (row) {
+                    row.role = row.role || 'user';
                 }
                 resolve(row);
             });
@@ -36,9 +40,13 @@ class User {
     static findById(id) {
         const db = getDB();
         return new Promise((resolve, reject) => {
-            db.get('SELECT id, name, email FROM users WHERE id = ?', [id], (err, row) => {
+            db.get('SELECT id, name, email, role FROM users WHERE id = ?', [id], (err, row) => {
                 if (err) {
                     return reject(err);
+                }
+                // Ensure role has a default value if not set
+                if (row) {
+                    row.role = row.role || 'user';
                 }
                 resolve(row);
             });

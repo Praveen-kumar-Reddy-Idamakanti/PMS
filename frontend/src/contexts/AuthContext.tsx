@@ -3,18 +3,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import * as authService from '@/services/auth.service';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
+import { User, UserRole } from '@/types/user';
+
+interface AuthUser extends User {
   isAuthenticated: boolean;
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  hasRole: (role: UserRole) => boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,13 +24,13 @@ const getAuthToken = () => {
   return localStorage.getItem('token');};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const checkAuth = useCallback(async (): Promise<User | null> => {
+  const checkAuth = useCallback(async (): Promise<AuthUser | null> => {
     const token = getAuthToken();
     
     if (!token) {
@@ -40,23 +40,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    try {
-      // First try to get user from localStorage if available
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
+    // First try to get user from localStorage if available
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser) as AuthUser;
         // If we have a valid stored user, use it while we verify with the server
         setUser(parsedUser);
+      } catch (e) {
+        console.error('Error parsing stored user:', e);
+        // If we can't parse the stored user, clear it
+        localStorage.removeItem('user');
       }
-      
-      // Then verify with the server
+    }
+    
+    try {
+      // Verify with the server
       const user = await authService.getCurrentUser();
       
       if (user) {
-        const userData: User = {
+        const userData: AuthUser = {
           id: user.id,
           name: user.name,
           email: user.email,
+          employeeId: user.employeeId,
+          role: user.role,
           isAuthenticated: true,
         };
         // Update both state and localStorage
@@ -65,15 +73,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return userData;
       }
       
-      // If we got here, the token is invalid
-      throw new Error('Invalid or expired token');
+      // If we get here, the token was valid but no user was returned
+      throw new Error('No user data received');
       
-    } catch (error) {
-      console.error('Failed to verify token:', error);
+    } catch (error: any) {
+      console.error('Error verifying user:', error);
+      
       // Clear invalid data
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       setUser(null);
+      
+      // Don't show error toast for common auth errors
+      const silentErrors = [
+        'session has expired',
+        'User not found',
+        'No user data received',
+        'Network Error',
+        'Failed to authenticate'
+      ];
+      
+      if (!silentErrors.some(msg => error.message?.includes(msg))) {
+        // Show error toast for unexpected errors
+        toast({
+          title: 'Authentication Error',
+          description: error.message || 'Failed to verify your session',
+          variant: 'destructive',
+        });
+      }
+      
       return null;
     }
   }, []);
@@ -184,10 +212,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('No user data received');
       }
       
-      const userData = {
+      const userData: AuthUser = {
         id: user.id,
         name: user.name,
         email: user.email,
+        employeeId: user.employeeId,
+        role: user.role,
         isAuthenticated: true
       };
       
@@ -253,12 +283,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [toast]);
 
+  const hasRole = useCallback((role: UserRole): boolean => {
+    if (!user) return false;
+    return user.role === role;
+  }, [user]);
+
   const contextValue = useMemo(() => ({
     user,
     loading,
     login,
     logout,
-  }), [user, loading, login, logout]);
+    hasRole,
+  }), [user, loading, login, logout, hasRole]);
 
   return (
     <AuthContext.Provider value={contextValue}>

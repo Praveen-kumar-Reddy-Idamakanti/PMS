@@ -189,13 +189,25 @@ export default function Dashboard() {
 
       <div className="container mx-auto px-4 py-6">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            Welcome back, {user.name}! 👋
-          </h2>
-          <p className="text-muted-foreground">
-            {format(new Date(), 'EEEE, MMMM do, yyyy')}
-          </p>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              Welcome back, {user.name}! 👋
+            </h2>
+            <p className="text-muted-foreground">
+              {format(new Date(), 'EEEE, MMMM do, yyyy')}
+            </p>
+          </div>
+          {(user.role === 'admin' || user.role === 'team_leader') && (
+            <Button 
+              variant="outline" 
+              onClick={() => navigate('/register')}
+              className="flex items-center gap-2"
+            >
+              <Users className="h-4 w-4" />
+              Register New User
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

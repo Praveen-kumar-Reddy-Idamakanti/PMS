@@ -36,11 +36,12 @@ module.exports = async (req, res, next) => {
             });
         }
 
-        // Attach user to request object
+        // Attach user to request object with role
         req.user = {
             id: user.id,
             name: user.name,
-            email: user.email
+            email: user.email,
+            role: user.role // Include user role in the request object
         };
         
         next();

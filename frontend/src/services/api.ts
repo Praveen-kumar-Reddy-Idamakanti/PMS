@@ -30,12 +30,48 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Clear the invalid token
-      localStorage.removeItem('token');
-      // Don't redirect here - let the AuthContext handle it
-      console.log('Session expired - please log in again');
+    if (error.response) {
+      // Handle specific status codes
+      if (error.response.status === 401 || error.response.status === 403) {
+        // Handle unauthorized/forbidden (token expired, invalid, etc.)
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        // Only redirect if not already on the login page
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        // Return a rejected promise with a more descriptive error
+        return Promise.reject(new Error(
+          error.response.data?.message || 'Authentication required. Please log in again.'
+        ));
+      }
+      
+      // For 404 Not Found, include the URL in the error message
+      if (error.response.status === 404) {
+        const errorMessage = `Resource not found: ${error.config.url}`;
+        console.error(errorMessage);
+        return Promise.reject(new Error(errorMessage));
+      }
+      
+      // For other 4xx/5xx errors, include the error message from the server if available
+      if (error.response.status >= 400) {
+        const errorMessage = error.response.data?.message || 
+                           `Request failed with status ${error.response.status}`;
+        return Promise.reject(new Error(errorMessage));
+      }
+    } else if (error.request) {
+      // The request was made but no response was received
+      const errorMessage = 'No response received from the server. Please check your connection.';
+      console.error(errorMessage, error.request);
+      return Promise.reject(new Error(errorMessage));
+    } else {
+      // Something happened in setting up the request
+      const errorMessage = `Request setup error: ${error.message}`;
+      console.error(errorMessage);
+      return Promise.reject(new Error(errorMessage));
     }
+    
+    // Default error handling
     return Promise.reject(error);
   }
 );

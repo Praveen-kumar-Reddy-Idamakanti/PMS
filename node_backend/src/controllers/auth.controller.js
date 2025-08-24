@@ -132,7 +132,8 @@ exports.login = async (req, res) => {
                     user: {
                         id: user.id,
                         name: user.name,
-                        email: user.email
+                        email: user.email,
+                        role: user.role || 'user'  // Ensure role has a default value
                     }
                 });
             }
@@ -165,7 +166,8 @@ exports.getCurrentUser = async (req, res) => {
             user: {
                 id: user.id,
                 name: user.name,
-                email: user.email
+                email: user.email,
+                role: user.role || 'user'  // Ensure role has a default value
             }
         });
     } catch (err) {
