@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Project Management & Attendance System Design System
+All colors MUST be HSL. Custom color tokens as specified.
+*/
+
+@layer base {
+  :root {
+    /* Core brand colors from specification */
+    --color-near-black: 210 11% 3%;       /* #040707 */
+    --color-orange: 20 85% 60%;           /* #f38542 */
+    --color-green: 108 43% 55%;           /* #5ebc59 */
+    --color-yellow-orange: 43 96% 58%;    /* #fdb723 */
+    --color-cyan: 188 55% 48%;            /* #36a9c1 */
+    --color-pink: 347 83% 58%;            /* #ee395e */
+    --color-teal: 177 47% 55%;            /* #59c4bc */
+    --color-red-pink: 348 83% 58%;        /* #ee3a5d */
+    --color-white: 0 0% 100%;             /* #ffffff */
+    --color-black: 0 0% 0%;               /* #000000 */
+
+    /* Semantic tokens */
+    --background: var(--color-white);
+    --foreground: var(--color-near-black);
+
+    --card: var(--color-white);
+    --card-foreground: var(--color-near-black);
+
+    --popover: var(--color-white);
+    --popover-foreground: var(--color-near-black);
+
+    --primary: var(--color-orange);
+    --primary-foreground: var(--color-white);
+
+    --secondary: 210 11% 96%;
+    --secondary-foreground: var(--color-near-black);
+
+    --muted: 210 11% 96%;
+    --muted-foreground: 210 6% 46%;
+
+    --accent: var(--color-cyan);
+    --accent-foreground: var(--color-white);
+
+    --destructive: var(--color-red-pink);
+    --destructive-foreground: var(--color-white);
+
+    --border: 210 11% 90%;
+    --input: 210 11% 95%;
+    --ring: var(--color-orange);
+
+    /* Status colors for attendance */
+    --status-excellent: var(--color-green);      /* >= 8.5h */
+    --status-warning: var(--color-yellow-orange); /* 8-8.5h */
+    --status-critical: var(--color-red-pink);    /* < 8h */
+    --status-info: var(--color-cyan);
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--color-orange)), hsl(var(--color-yellow-orange)));
+    --gradient-status: linear-gradient(135deg, hsl(var(--color-green)), hsl(var(--color-teal)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--color-cyan)), hsl(var(--color-teal)));
+
+    /* Shadows */
+    --shadow-soft: 0 2px 20px -5px hsl(var(--color-near-black) / 0.1);
+    --shadow-medium: 0 8px 30px -8px hsl(var(--color-near-black) / 0.15);
+    --shadow-strong: 0 20px 40px -15px hsl(var(--color-near-black) / 0.2);
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: var(--color-near-black);
+    --foreground: var(--color-white);
+
+    --card: 210 11% 6%;
+    --card-foreground: var(--color-white);
+
+    --popover: 210 11% 6%;
+    --popover-foreground: var(--color-white);
+
+    --primary: var(--color-orange);
+    --primary-foreground: var(--color-white);
+
+    --secondary: 210 11% 12%;
+    --secondary-foreground: var(--color-white);
+
+    --muted: 210 11% 12%;
+    --muted-foreground: 210 6% 65%;
+
+    --accent: var(--color-cyan);
+    --accent-foreground: var(--color-white);
+
+    --destructive: var(--color-red-pink);
+    --destructive-foreground: var(--color-white);
+
+    --border: 210 11% 15%;
+    --input: 210 11% 12%;
+    --ring: var(--color-orange);
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Custom utilities */
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-status {
+    background: var(--gradient-status);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-medium {
+    box-shadow: var(--shadow-medium);
+  }
+
+  .shadow-strong {
+    box-shadow: var(--shadow-strong);
+  }
+}
