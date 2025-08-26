@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { LoadingGif } from "@/components/ui/LoadingGif";
 
 const formSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -195,8 +195,12 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
 
         <div className="flex justify-end">
           <Button type="submit" disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Create User
+            {isLoading ? (
+              <span className="flex items-center">
+                <LoadingGif className="w-4 h-4 mr-2" />
+                Creating...
+              </span>
+            ) : 'Create User'}
           </Button>
         </div>
       </form>

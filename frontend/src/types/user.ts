@@ -1,5 +1,6 @@
 export enum UserRole {
   ADMIN = 'admin',
+  HR = 'hr',
   TEAM_LEADER = 'team_leader',
   EMPLOYEE = 'employee',
   INTERN = 'intern'
@@ -27,6 +28,12 @@ export interface CreateUserDto {
 export const rolePermissions = {
   [UserRole.ADMIN]: [
     UserRole.ADMIN,
+    UserRole.HR,
+    UserRole.TEAM_LEADER,
+    UserRole.EMPLOYEE,
+    UserRole.INTERN
+  ],
+  [UserRole.HR]: [
     UserRole.TEAM_LEADER,
     UserRole.EMPLOYEE,
     UserRole.INTERN

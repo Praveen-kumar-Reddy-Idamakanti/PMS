@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AttendanceStatusCard } from "@/components/attendance/AttendanceStatusCard";
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { attendanceService } from "@/services/attendance.service";
 
 interface User {
   id: string;
@@ -27,7 +28,6 @@ interface User {
 }
 
 interface CheckInOutData {
-  photo?: string;
   location?: {
     latitude: number;
     longitude: number;
@@ -38,6 +38,7 @@ interface CheckInOutData {
 }
 
 export default function Dashboard() {
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
   const [isCheckOutModalOpen, setIsCheckOutModalOpen] = useState(false);
@@ -60,25 +61,52 @@ export default function Dashboard() {
     const parsedUser = JSON.parse(userData);
     setUser(parsedUser);
 
-    // Load attendance state
-    const attendanceData = localStorage.getItem('attendanceState');
-    if (attendanceData) {
-      const attendance = JSON.parse(attendanceData);
-      setIsCheckedIn(attendance.isCheckedIn);
-      setCheckInTime(attendance.checkInTime);
-      setHoursWorked(attendance.hoursWorked || 0);
-    }
-
-    // Update hours worked every minute if checked in
-    const interval = setInterval(() => {
-      if (isCheckedIn && checkInTime) {
-        const now = new Date();
-        const checkIn = new Date(checkInTime);
-        const diffMs = now.getTime() - checkIn.getTime();
-        const diffHours = diffMs / (1000 * 60 * 60);
-        setHoursWorked(diffHours);
+    // Load today's attendance status and hours worked from the server
+    const loadTodaysStatus = async () => {
+      try {
+        const response = await attendanceService.getTodaysStatus();
+        const { status, lastAction } = response.data;
+        
+        if (status === 'checkin' && lastAction) {
+          setIsCheckedIn(true);
+          setCheckInTime(lastAction.timestamp);
+          
+          // If we have check-in time, calculate hours worked
+          if (lastAction.timestamp) {
+            const checkIn = new Date(lastAction.timestamp);
+            const now = new Date();
+            const diffMs = now.getTime() - checkIn.getTime();
+            setHoursWorked(diffMs / (1000 * 60 * 60));
+          }
+        } else {
+          setIsCheckedIn(false);
+          // If we have a check-out time, calculate total hours worked
+          if (lastAction?.type === 'checkout' && lastAction?.totalHours) {
+            setHoursWorked(parseFloat(lastAction.totalHours));
+          } else {
+            setHoursWorked(0);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading attendance status:', error);
+        // Fallback to localStorage if API fails
+        const attendanceData = localStorage.getItem('attendanceState');
+        if (attendanceData) {
+          const attendance = JSON.parse(attendanceData);
+          setIsCheckedIn(attendance.isCheckedIn);
+          setCheckInTime(attendance.checkInTime);
+          setHoursWorked(attendance.hoursWorked || 0);
+        }
       }
-    }, 60000);
+    };
+
+    // Initial load
+    loadTodaysStatus();
+
+    // Set up polling to update hours worked every minute
+    const interval = setInterval(() => {
+      loadTodaysStatus();
+    }, 60000); // Update every minute
 
     return () => clearInterval(interval);
   }, [navigate, isCheckedIn, checkInTime]);
@@ -87,25 +115,39 @@ export default function Dashboard() {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const now = new Date().toISOString();
-      setIsCheckedIn(true);
-      setCheckInTime(now);
-      setHoursWorked(0);
-      
-      // Save to localStorage
-      localStorage.setItem('attendanceState', JSON.stringify({
-        isCheckedIn: true,
-        checkInTime: now,
-        hoursWorked: 0,
-      }));
-      
-      toast({
-        title: "Checked in successfully!",
-        description: `Welcome back, ${user?.name}. Have a productive day!`,
+      // Call the attendance service
+      await attendanceService.checkIn({
+        notes: 'Checked in from dashboard',
+        location: data.location ? {
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          address: data.location.address || 'Location not available'
+        } : undefined
       });
+      
+      // Refresh the status from the server
+      const statusResponse = await attendanceService.getTodaysStatus();
+      const { status, lastAction } = statusResponse.data;
+      
+      if (status === 'checkin' && lastAction) {
+        setIsCheckedIn(true);
+        setCheckInTime(lastAction.timestamp);
+        setHoursWorked(0);
+        
+        // Save to localStorage for quick reference
+        localStorage.setItem('attendanceState', JSON.stringify({
+          isCheckedIn: true,
+          checkInTime: lastAction.timestamp,
+          hoursWorked: 0,
+        }));
+        
+        toast({
+          title: 'Checked in successfully!',
+          description: `Welcome back, ${user?.name}. Have a productive day!`,
+        });
+      } else {
+        throw new Error('Failed to verify check-in status');
+      }
       
       setIsCheckInModalOpen(false);
     } catch (error) {
@@ -123,26 +165,47 @@ export default function Dashboard() {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setIsCheckedIn(false);
-      
-      // Save to localStorage
-      localStorage.setItem('attendanceState', JSON.stringify({
-        isCheckedIn: false,
-        checkInTime: null,
-        hoursWorked,
-        lastCheckOut: new Date().toISOString(),
-      }));
-      
-      toast({
-        title: "Checked out successfully!",
-        description: `Great work today! You worked ${Math.floor(hoursWorked)}h ${Math.round((hoursWorked % 1) * 60)}m.`,
+      // Call the attendance service
+      await attendanceService.checkOut({
+        notes: 'Checked out from dashboard',
+        location: data.location ? {
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          address: data.location.address || 'Location not available'
+        } : undefined
       });
       
+      // Refresh the status from the server
+      const statusResponse = await attendanceService.getTodaysStatus();
+      const { status, lastAction } = statusResponse.data;
+      
+      if (status === 'checkout' && lastAction) {
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+        
+        // Get the total hours worked from the server response if available
+        const totalHours = lastAction.totalHours || hoursWorked;
+        
+        // Save to localStorage
+        localStorage.setItem('attendanceState', JSON.stringify({
+          isCheckedIn: false,
+          checkInTime: null,
+          hoursWorked: totalHours,
+          lastCheckOut: lastAction.timestamp,
+        }));
+        
+        // Update the hours worked in state
+        setHoursWorked(totalHours);
+        
+        toast({
+          title: 'Checked out successfully!',
+          description: `Goodbye, ${user?.name}. You worked ${totalHours.toFixed(2)} hours today.`,
+        });
+      } else {
+        throw new Error('Failed to verify check-out status');
+      }
+      
       setIsCheckOutModalOpen(false);
-      setCheckInTime(null);
     } catch (error) {
       toast({
         title: "Check-out failed",

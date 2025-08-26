@@ -13,9 +13,9 @@ const db = new sqlite3.Database(dbPath);
 // Admin user details
 const adminUser = {
   name: 'Admin User',
-  email: 'admin@example.com',
+  email: 'super_admin@example.com',
   password: 'Admin@123', // In a real app, this should be passed as an environment variable
-  role: 'admin'
+  role: 'super_admin'
 };
 
 async function createAdminUser() {

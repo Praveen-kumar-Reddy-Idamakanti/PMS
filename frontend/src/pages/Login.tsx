@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { LoadingGif } from '@/components/ui/LoadingGif';
 
 interface LoginCredentials {
   identifier: string;
@@ -98,7 +98,13 @@ export default function Login() {
           </p>
         </div>
         
-        <LoginForm onLogin={handleLogin} isLoading={isLoading} />
+        {isLoading || authLoading ? (
+          <div className="min-h-screen flex items-center justify-center">
+            <LoadingGif text="Authenticating..." className="min-h-screen" />
+          </div>
+        ) : (
+          <LoginForm onLogin={handleLogin} isLoading={isLoading} />
+        )}
         
         <div className="mt-6 text-center text-sm text-muted-foreground">
           <p>Demo credentials:</p>

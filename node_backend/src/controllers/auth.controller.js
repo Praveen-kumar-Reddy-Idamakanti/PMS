@@ -9,7 +9,12 @@ const sendResponse = (res, status, success, message, data = null) => {
     return res.status(status).json(response);
 };
 
-exports.register = async (req, res) => {
+/**
+ * Register a new user
+ * @route POST /api/auth/register
+ * @access Public
+ */
+const register = async (req, res) => {
     const { name, email, password, role = 'user' } = req.body; // Default to 'user' role if not provided
 
     try {
@@ -75,7 +80,12 @@ exports.register = async (req, res) => {
 // User login
 // @route   POST /api/auth/login
 // @access  Public
-exports.login = async (req, res) => {
+/**
+ * User login
+ * @route POST /api/auth/login
+ * @access Public
+ */
+const login = async (req, res) => {
     const { email, password } = req.body;
     console.log('Login attempt for email:', email);
 
@@ -148,9 +158,12 @@ exports.login = async (req, res) => {
 };
 
 // Get current user
-// @route   GET /api/auth/user
-// @access  Private
-exports.getCurrentUser = async (req, res) => {
+/**
+ * Get current user
+ * @route GET /api/auth/user
+ * @access Private
+ */
+const getCurrentUser = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         if (!user) {
@@ -179,11 +192,27 @@ exports.getCurrentUser = async (req, res) => {
     }
 };
 
-// Add a logout endpoint (optional, since JWT is stateless)
-exports.logout = (req, res) => {
+/**
+ * Logout user (clears client-side token)
+ * @route POST /api/auth/logout
+ * @access Private
+ */
+const logout = (req, res) => {
     // Since JWT is stateless, the client should just remove the token
-    res.status(200).json({ 
-        success: true,
+    // Clear the token cookie
+    res.clearCookie('token');
+    
+    // Return success response
+    return res.status(200).json({ 
+        success: true, 
         message: 'Logged out successfully' 
     });
+};
+
+// Export all controller functions
+module.exports = {
+    register,
+    login,
+    getCurrentUser,
+    logout
 };

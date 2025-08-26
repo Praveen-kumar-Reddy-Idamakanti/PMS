@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { getDB } = require('../config/db');
+const logger = require('../utils/logger');
 
 class User {
     static async create(userData) {
@@ -64,4 +65,35 @@ class User {
     }
 }
 
-module.exports = User;
+// Export the User class and its static methods
+module.exports = {
+    ...User,
+    /**
+     * Create a new user
+     * @param {Object} userData - User data including name, email, password, and optional role
+     * @returns {Promise<Object>} The created user object
+     */
+    create: User.create,
+    
+    /**
+     * Find user by email
+     * @param {string} email - User's email
+     * @returns {Promise<Object|null>} User object if found, null otherwise
+     */
+    findByEmail: User.findByEmail,
+    
+    /**
+     * Find user by ID
+     * @param {number} id - User ID
+     * @returns {Promise<Object|null>} User object if found, null otherwise
+     */
+    findById: User.findById,
+    
+    /**
+     * Compare password with hashed password
+     * @param {string} password - Plain text password
+     * @param {string} hashedPassword - Hashed password from database
+     * @returns {Promise<boolean>} True if passwords match, false otherwise
+     */
+    comparePassword: User.comparePassword
+};

@@ -1,16 +1,16 @@
 // auth.routes.js
 const express = require('express');
 const router = express.Router();
-const { register, login, getCurrentUser, logout } = require('../controllers/auth.controller');
-const auth = require('../middleware/auth.middleware');
+const authController = require('../controllers/auth.controller');
+const authMiddleware = require('../middleware/auth.middleware');
 
 // Public routes
-router.post('/register', register);
-router.post('/login', login);
+router.post('/register', authController.register);
+router.post('/login', authController.login);
 
 // Protected routes
-router.get('/user', auth, getCurrentUser);
-router.post('/logout', auth, logout);
+router.get('/user', authMiddleware.authenticate, authController.getCurrentUser);
+router.post('/logout', authMiddleware.authenticate, authController.logout);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
