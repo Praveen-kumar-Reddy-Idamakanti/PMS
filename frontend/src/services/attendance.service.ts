@@ -98,9 +98,10 @@ const getAttendanceRecords = async (params: {
   userId?: number;
 }) => {
   try {
-    const response = await api.get('/records', { params });
+    const response = await api.get('/attendance/records', { params });
     return response.data;
   } catch (error: any) {
+    console.error('Error in getAttendanceRecords:', error);
     throw error.response?.data || { message: 'Error fetching attendance records' };
   }
 };
@@ -112,9 +113,10 @@ const getAttendanceSummary = async (params: {
   userId?: number;
 }) => {
   try {
-    const response = await api.get('/summary', { params });
+    const response = await api.get('/attendance/summary', { params });
     return response.data;
   } catch (error: any) {
+    console.error('Error in getAttendanceSummary:', error);
     throw error.response?.data || { message: 'Error fetching attendance summary' };
   }
 };

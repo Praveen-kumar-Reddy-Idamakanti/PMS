@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AttendanceStatusCard } from "@/components/attendance/AttendanceStatusCard";
@@ -12,12 +12,12 @@ import {
   Users, 
   CheckCircle,
   ClipboardList,
-  BarChart3,
-  Settings
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { attendanceService } from "@/services/attendance.service";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface User {
   id: string;
@@ -31,14 +31,14 @@ interface CheckInOutData {
   location?: {
     latitude: number;
     longitude: number;
-    address?: string;
+    address: string;
   };
-  timestamp: string;
+  notes?: string;
+  photo?: string; // Base64 encoded image string
   type: 'checkin' | 'checkout';
 }
 
 export default function Dashboard() {
-  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
   const [isCheckOutModalOpen, setIsCheckOutModalOpen] = useState(false);
@@ -49,9 +49,110 @@ export default function Dashboard() {
   
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
+  interface TodayStatus {
+    isCheckedIn: boolean;
+    checkInTime: string | null;
+    hoursWorked: number;
+  }
+
+  // Define the query function
+  const fetchTodayStatus = useCallback(async (): Promise<TodayStatus> => {
+    try {
+      console.log('Fetching today\'s attendance status...');
+      const response = await attendanceService.getTodaysStatus();
+      console.log('Today\'s status response:', response.data);
+      return response.data as TodayStatus;
+    } catch (error) {
+      console.error('Error fetching today\'s status:', error);
+      return { isCheckedIn: false, checkInTime: null, hoursWorked: 0 };
+    }
+  }, []);
+
+  // Fetch today's attendance status
+  const { 
+    data: todayStatus,
+    isLoading: isLoadingTodayStatus, 
+    error: todayStatusError,
+    refetch: refetchTodayStatus 
+  } = useQuery<TodayStatus>({
+    queryKey: ['todayAttendance'],
+    queryFn: fetchTodayStatus,
+    initialData: () => {
+      const storedStatus = localStorage.getItem('todayAttendance');
+      return storedStatus 
+        ? JSON.parse(storedStatus) 
+        : { isCheckedIn: false, checkInTime: null, hoursWorked: 0 };
+    },
+    refetchInterval: 60000, // Refetch every minute to update hours worked
+  });
+
+  // Update local state and localStorage when todayStatus changes
   useEffect(() => {
-    // Load user data
+    if (todayStatus) {
+      console.log('Updating local state with today\'s status:', todayStatus);
+      setIsCheckedIn(todayStatus.isCheckedIn || false);
+      setCheckInTime(todayStatus.checkInTime || null);
+      setHoursWorked(todayStatus.hoursWorked || 0);
+      
+      // Persist to localStorage for better UX on refresh
+      localStorage.setItem('todayAttendance', JSON.stringify(todayStatus));
+    }
+  }, [todayStatus]);
+
+  // Handle query errors
+  useEffect(() => {
+    if (todayStatusError) {
+      console.error('Error in today\'s status query:', todayStatusError);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch today\'s attendance status',
+        variant: 'destructive',
+      });
+    }
+  }, [todayStatusError]);
+
+  interface WeeklySummary {
+    totalHours: number;
+    changeFromLastWeek: number;
+  }
+
+  // Fetch weekly hours summary
+  const { 
+    data: weeklySummary,
+    error: weeklySummaryError 
+  } = useQuery<WeeklySummary>({
+    queryKey: ['weeklySummary'],
+    queryFn: async (): Promise<WeeklySummary> => {
+      try {
+        const response = await attendanceService.getAttendanceSummary({
+          startDate: format(new Date(new Date().setDate(new Date().getDate() - 7)), 'yyyy-MM-dd'),
+          endDate: format(new Date(), 'yyyy-MM-dd')
+        });
+        return response.data as WeeklySummary;
+      } catch (error) {
+        console.error('Error fetching weekly summary:', error);
+        return { totalHours: 0, changeFromLastWeek: 0 };
+      }
+    },
+    initialData: { totalHours: 0, changeFromLastWeek: 0 },
+    staleTime: 5 * 60 * 1000 // 5 minutes
+  });
+
+  // Handle weekly summary errors
+  useEffect(() => {
+    if (weeklySummaryError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch weekly summary data',
+        variant: 'destructive',
+      });
+    }
+  }, [weeklySummaryError]);
+
+  // Load user data
+  useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) {
       navigate('/login');
@@ -60,94 +161,45 @@ export default function Dashboard() {
 
     const parsedUser = JSON.parse(userData);
     setUser(parsedUser);
-
-    // Load today's attendance status and hours worked from the server
-    const loadTodaysStatus = async () => {
-      try {
-        const response = await attendanceService.getTodaysStatus();
-        const { status, lastAction } = response.data;
-        
-        if (status === 'checkin' && lastAction) {
-          setIsCheckedIn(true);
-          setCheckInTime(lastAction.timestamp);
-          
-          // If we have check-in time, calculate hours worked
-          if (lastAction.timestamp) {
-            const checkIn = new Date(lastAction.timestamp);
-            const now = new Date();
-            const diffMs = now.getTime() - checkIn.getTime();
-            setHoursWorked(diffMs / (1000 * 60 * 60));
-          }
-        } else {
-          setIsCheckedIn(false);
-          // If we have a check-out time, calculate total hours worked
-          if (lastAction?.type === 'checkout' && lastAction?.totalHours) {
-            setHoursWorked(parseFloat(lastAction.totalHours));
-          } else {
-            setHoursWorked(0);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading attendance status:', error);
-        // Fallback to localStorage if API fails
-        const attendanceData = localStorage.getItem('attendanceState');
-        if (attendanceData) {
-          const attendance = JSON.parse(attendanceData);
-          setIsCheckedIn(attendance.isCheckedIn);
-          setCheckInTime(attendance.checkInTime);
-          setHoursWorked(attendance.hoursWorked || 0);
-        }
-      }
-    };
-
-    // Initial load
-    loadTodaysStatus();
-
-    // Set up polling to update hours worked every minute
-    const interval = setInterval(() => {
-      loadTodaysStatus();
-    }, 60000); // Update every minute
-
-    return () => clearInterval(interval);
-  }, [navigate, isCheckedIn, checkInTime]);
+  }, [navigate]);
 
   const handleCheckIn = async (data: CheckInOutData) => {
     setIsLoading(true);
     
     try {
-      // Call the attendance service
-      await attendanceService.checkIn({
-        notes: 'Checked in from dashboard',
+      const checkInData: any = {
+        type: 'checkin',
         location: data.location ? {
           latitude: data.location.latitude,
           longitude: data.location.longitude,
           address: data.location.address || 'Location not available'
-        } : undefined
+        } : undefined,
+        notes: 'Checked in from dashboard'
+      };
+
+      // Only include photo if it exists
+      if (data.photo) {
+        checkInData.photo = data.photo;
+      }
+
+      const response = await attendanceService.checkIn(checkInData);
+      
+      // Immediately update the UI state
+      const now = new Date().toISOString();
+      setIsCheckedIn(true);
+      setCheckInTime(now);
+      setHoursWorked(0);
+      
+      // Invalidate and refetch today's status to ensure data consistency
+      await queryClient.invalidateQueries({ 
+        queryKey: ['todayAttendance'],
+        refetchType: 'active' // Force immediate refetch
       });
       
-      // Refresh the status from the server
-      const statusResponse = await attendanceService.getTodaysStatus();
-      const { status, lastAction } = statusResponse.data;
-      
-      if (status === 'checkin' && lastAction) {
-        setIsCheckedIn(true);
-        setCheckInTime(lastAction.timestamp);
-        setHoursWorked(0);
-        
-        // Save to localStorage for quick reference
-        localStorage.setItem('attendanceState', JSON.stringify({
-          isCheckedIn: true,
-          checkInTime: lastAction.timestamp,
-          hoursWorked: 0,
-        }));
-        
-        toast({
-          title: 'Checked in successfully!',
-          description: `Welcome back, ${user?.name}. Have a productive day!`,
-        });
-      } else {
-        throw new Error('Failed to verify check-in status');
-      }
+      toast({
+        title: 'Checked in successfully!',
+        description: 'Your attendance has been recorded.',
+      });
       
       setIsCheckInModalOpen(false);
     } catch (error) {
@@ -165,45 +217,30 @@ export default function Dashboard() {
     setIsLoading(true);
     
     try {
-      // Call the attendance service
       await attendanceService.checkOut({
-        notes: 'Checked out from dashboard',
         location: data.location ? {
           latitude: data.location.latitude,
           longitude: data.location.longitude,
           address: data.location.address || 'Location not available'
-        } : undefined
+        } : undefined,
+        notes: 'Checked out from dashboard'
       });
       
-      // Refresh the status from the server
-      const statusResponse = await attendanceService.getTodaysStatus();
-      const { status, lastAction } = statusResponse.data;
+      // Immediately update the UI state
+      setIsCheckedIn(false);
+      setCheckInTime(null);
+      setHoursWorked(0);
       
-      if (status === 'checkout' && lastAction) {
-        setIsCheckedIn(false);
-        setCheckInTime(null);
-        
-        // Get the total hours worked from the server response if available
-        const totalHours = lastAction.totalHours || hoursWorked;
-        
-        // Save to localStorage
-        localStorage.setItem('attendanceState', JSON.stringify({
-          isCheckedIn: false,
-          checkInTime: null,
-          hoursWorked: totalHours,
-          lastCheckOut: lastAction.timestamp,
-        }));
-        
-        // Update the hours worked in state
-        setHoursWorked(totalHours);
-        
-        toast({
-          title: 'Checked out successfully!',
-          description: `Goodbye, ${user?.name}. You worked ${totalHours.toFixed(2)} hours today.`,
-        });
-      } else {
-        throw new Error('Failed to verify check-out status');
-      }
+      // Invalidate and refetch today's status to ensure data consistency
+      await queryClient.invalidateQueries({ 
+        queryKey: ['todayAttendance'],
+        refetchType: 'active' // Force immediate refetch
+      });
+      
+      toast({
+        title: 'Checked out successfully!',
+        description: 'Your working hours have been recorded.',
+      });
       
       setIsCheckOutModalOpen(false);
     } catch (error) {
@@ -219,17 +256,13 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem('user');
-    localStorage.removeItem('attendanceState');
-    toast({
-      title: "Logged out successfully",
-      description: "See you next time!",
-    });
+    localStorage.removeItem('token');
     navigate('/login');
   };
 
   const getAttendanceStatus = (): 'excellent' | 'warning' | 'critical' => {
     if (hoursWorked >= 8.5) return 'excellent';
-    if (hoursWorked >= 8) return 'warning';
+    if (hoursWorked >= 6 && hoursWorked < 8.5) return 'warning';
     return 'critical';
   };
 
@@ -338,9 +371,13 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">32.5h</div>
-              <p className="text-xs text-muted-foreground">
-                +2.5h from last week
+              <div className="text-2xl font-bold text-gray-800">
+                {weeklySummary?.totalHours ? `${weeklySummary.totalHours.toFixed(1)}h` : '0h'}
+              </div>
+              <p className="text-xs text-gray-500">
+                {weeklySummary?.changeFromLastWeek ? 
+                  `${weeklySummary.changeFromLastWeek >= 0 ? '+' : ''}${weeklySummary.changeFromLastWeek.toFixed(1)}h from last week` : 
+                  'No data from last week'}
               </p>
             </CardContent>
           </Card>

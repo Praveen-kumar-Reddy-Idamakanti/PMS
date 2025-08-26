@@ -200,13 +200,60 @@ const getAttendanceRecords = async (req, res) => {
 const getTodaysStatus = async (req, res) => {
     try {
         const userId = req.user.id;
-        const record = await Attendance.getTodaysRecord(userId);
+        
+        // Get today's check-in and check-out records
+        const today = new Date().toISOString().split('T')[0];
+        const records = await new Promise((resolve, reject) => {
+            const db = require('../config/db').getDB();
+            db.all(
+                `SELECT * FROM attendance 
+                WHERE user_id = ? 
+                AND date(timestamp) = date(?)
+                ORDER BY timestamp`,
+                [userId, today],
+                (err, rows) => {
+                    if (err) return reject(err);
+                    resolve(rows || []);
+                }
+            );
+        });
+
+        // Find the latest check-in and check-out
+        const checkInRecord = records.find(r => r.type === 'checkin');
+        const checkOutRecord = records.find(r => r.type === 'checkout');
+        const latestRecord = records[records.length - 1];
+
+        // Calculate hours worked if checked in but not checked out
+        let hoursWorked = 0;
+        if (checkInRecord && !checkOutRecord) {
+            const checkInTime = new Date(checkInRecord.timestamp);
+            const now = new Date();
+            hoursWorked = (now - checkInTime) / (1000 * 60 * 60); // Convert ms to hours
+        } else if (checkInRecord && checkOutRecord) {
+            const checkInTime = new Date(checkInRecord.timestamp);
+            const checkOutTime = new Date(checkOutRecord.timestamp);
+            hoursWorked = (checkOutTime - checkInTime) / (1000 * 60 * 60);
+        }
 
         res.json({
             success: true,
             data: {
-                status: record ? record.type : 'not_checked_in',
-                lastAction: record
+                status: latestRecord ? latestRecord.type : 'not_checked_in',
+                isCheckedIn: latestRecord?.type === 'checkin',
+                checkInTime: checkInRecord?.timestamp || null,
+                checkOutTime: checkOutRecord?.timestamp || null,
+                hoursWorked: Math.round(hoursWorked * 100) / 100, // Round to 2 decimal places
+                lastAction: latestRecord ? {
+                    id: latestRecord.id,
+                    type: latestRecord.type,
+                    timestamp: latestRecord.timestamp,
+                    notes: latestRecord.notes,
+                    location: latestRecord.latitude && latestRecord.longitude ? {
+                        latitude: latestRecord.latitude,
+                        longitude: latestRecord.longitude,
+                        address: latestRecord.address
+                    } : null
+                } : null
             }
         });
 

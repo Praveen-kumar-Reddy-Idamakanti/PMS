@@ -1,5 +1,6 @@
 const { query, run } = require('../config/db');
 const { NotFoundError, BadRequestError } = require('../utils/errors');
+const Attendance = require('../models/attendance.model');
 
 // Get all attendance records with filtering options
 exports.getAllAttendance = async (req, res, next) => {
@@ -40,10 +41,78 @@ exports.getAllAttendance = async (req, res, next) => {
       params.push(date);
     }
     
-    sqlQuery += ' ORDER BY a.timestamp DESC';
-    
+        // First, get all attendance records for the date range
     const attendance = await query(sqlQuery, params);
-    res.json({ success: true, data: attendance });
+    
+    // Group records by user and date
+    const userDateMap = {};
+    
+    attendance.forEach(record => {
+      const date = new Date(record.timestamp).toISOString().split('T')[0];
+      const key = `${record.user_id}_${date}`;
+      
+      if (!userDateMap[key]) {
+        userDateMap[key] = {
+          user_id: record.user_id,
+          name: record.name,
+          email: record.email,
+          employee_id: record.employee_id,
+          date: date,
+          checkins: [],
+          checkouts: []
+        };
+      }
+      
+      if (record.type === 'checkin') {
+        userDateMap[key].checkins.push(record.timestamp);
+      } else if (record.type === 'checkout') {
+        userDateMap[key].checkouts.push(record.timestamp);
+      }
+    });
+    
+    // Process each user's daily records
+    const processedRecords = Object.values(userDateMap).map(record => {
+      // Sort check-ins and check-outs
+      const checkins = [...record.checkins].sort();
+      const checkouts = [...record.checkouts].sort();
+      
+      // Pair check-ins with check-outs
+      const pairs = [];
+      let totalHours = 0;
+      
+      for (let i = 0; i < Math.max(checkins.length, checkouts.length); i++) {
+        const checkin = checkins[i] || null;
+        const checkout = checkouts[i] || null;
+        
+        pairs.push({ checkin, checkout });
+        
+        // Calculate hours if we have both check-in and check-out
+        if (checkin && checkout) {
+          const hours = (new Date(checkout) - new Date(checkin)) / (1000 * 60 * 60);
+          totalHours += hours;
+        }
+      }
+      
+      // Get the first check-in and last check-out if available
+      const firstCheckin = checkins.length > 0 ? checkins[0] : null;
+      const lastCheckout = checkouts.length > 0 ? checkouts[checkouts.length - 1] : null;
+      
+      return {
+        id: `${record.user_id}_${record.date}`,
+        user_id: record.user_id,
+        name: record.name,
+        email: record.email,
+        employee_id: record.employee_id,
+        date: record.date,
+        checkin_time: firstCheckin,
+        checkout_time: lastCheckout,
+        total_hours: totalHours,
+        status: checkins.length > 0 ? 'present' : 'absent',
+        pairs: pairs
+      };
+    });
+    
+    res.json({ success: true, data: processedRecords });
   } catch (error) {
     next(error);
   }

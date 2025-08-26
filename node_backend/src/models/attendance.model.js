@@ -149,15 +149,19 @@ class Attendance {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
+        // Format dates in SQLite's date format (YYYY-MM-DD)
+        const todayStr = today.toISOString().split('T')[0];
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
         return new Promise((resolve, reject) => {
             db.get(
                 `SELECT * FROM attendance 
                 WHERE user_id = ? 
-                AND timestamp >= ? 
-                AND timestamp < ?
+                AND date(timestamp) >= date(?)
+                AND date(timestamp) < date(?)
                 ORDER BY timestamp DESC
                 LIMIT 1`,
-                [userId, today.toISOString(), tomorrow.toISOString()],
+                [userId, todayStr, tomorrowStr],
                 (err, row) => {
                     if (err) {
                         console.error('Error fetching today\'s attendance:', err);
@@ -190,6 +194,62 @@ class Attendance {
      * @param {string} [endDate] - End date (ISO string)
      * @returns {Promise<Object>} Object containing total hours and detailed records
      */
+    /**
+     * Check if user has checked in today
+     * @param {string} userId - The ID of the user
+     * @returns {Promise<boolean>} True if user has checked in today, false otherwise
+     */
+    static async hasCheckedInToday(userId) {
+        const db = getDB();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Format dates in SQLite's date format (YYYY-MM-DD)
+        const todayStr = today.toISOString().split('T')[0];
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        return new Promise((resolve, reject) => {
+            db.get(
+                `SELECT 1 FROM attendance 
+                WHERE user_id = ? 
+                AND type = 'checkin'
+                AND date(timestamp) >= date(?)
+                AND date(timestamp) < date(?)
+                LIMIT 1`,
+                [userId, todayStr, tomorrowStr],
+                (err, row) => {
+                    if (err) {
+                        console.error('Error checking today\'s check-in:', err);
+                        return reject(err);
+                    }
+                    resolve(!!row);
+                }
+            );
+        });
+    }
+
+    /**
+     * Get user's attendance status (present/absent) for today
+     * @param {string} userId - The ID of the user
+     * @returns {Promise<{status: string, lastCheckIn: string|null}>} Attendance status and last check-in time
+     */
+    static async getTodaysAttendanceStatus(userId) {
+        try {
+            const hasCheckedIn = await this.hasCheckedInToday(userId);
+            const todaysRecord = await this.getTodaysRecord(userId);
+            
+            return {
+                status: hasCheckedIn ? 'present' : 'absent',
+                lastCheckIn: todaysRecord?.timestamp || null
+            };
+        } catch (error) {
+            console.error('Error getting today\'s attendance status:', error);
+            throw error;
+        }
+    }
+
     static async calculateWorkedHours(userId, startDate, endDate) {
         const db = getDB();
         let query = `
@@ -214,8 +274,7 @@ class Attendance {
                 (julianday(next_timestamp) - julianday(timestamp)) * 24 as hours_worked
             FROM paired_records
             WHERE type = 'checkin' AND next_type = 'checkout'
-            ORDER BY date DESC
-        `;
+            ORDER BY date DESC`;
 
         const params = [userId];
         if (startDate) params.push(startDate);

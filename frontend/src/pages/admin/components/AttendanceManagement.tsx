@@ -86,13 +86,13 @@ export const AttendanceManagement = () => {
               <TableRow key={record.id}>
                 <TableCell>{record.name || 'Unknown User'}</TableCell>
                 <TableCell>
-                  {record.checkin_time ? format(new Date(record.checkin_time), 'PPpp') : 'N/A'}
+                  {record.checkin_time ? format(new Date(record.checkin_time), 'PPpp') : 'Not checked in'}
                 </TableCell>
                 <TableCell>
-                  {record.checkout_time ? format(new Date(record.checkout_time), 'PPpp') : 'N/A'}
+                  {record.checkout_time ? format(new Date(record.checkout_time), 'PPpp') : 'Not checked out'}
                 </TableCell>
                 <TableCell>
-                  {record.total_hours ? `${record.total_hours.toFixed(2)}h` : 'N/A'}
+                  {record.total_hours ? `${record.total_hours.toFixed(2)}h` : 'Not checked out'}
                 </TableCell>
                 <TableCell>
                   <span className={`px-2 py-1 text-xs rounded-full ${

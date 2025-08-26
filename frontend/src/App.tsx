@@ -87,15 +87,18 @@ const App = () => {
                 </MainLayout>
               } />
               
-              {/* Admin Routes */}
+              {/* Admin Routes - Only accessible by super_admin */}
               <Route element={
-                <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.HR]} />
+                <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]} />
               }>
-                <Route path="/admin" element={
-                  <MainLayout>
-                    <AdminDashboard />
-                  </MainLayout>
-                } />
+                <Route 
+                  path="/admin" 
+                  element={
+                    <MainLayout>
+                      <AdminDashboard />
+                    </MainLayout>
+                  } 
+                />
               </Route>
             </Route>
 
