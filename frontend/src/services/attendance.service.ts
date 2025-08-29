@@ -55,7 +55,14 @@ const checkIn = async (data: {
   };
 }) => {
   try {
-    const response = await api.post('/attendance/checkin', data);
+    // Ensure we send the current date in ISO format with timezone offset
+    const timestamp = new Date();
+    const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
+    
+    const response = await api.post('/attendance/checkin', {
+      ...data,
+      timezoneOffset // Send the client's timezone offset
+    });
     return response.data;
   } catch (error: any) {
     throw error.response?.data || { message: 'Error checking in' };
@@ -72,20 +79,71 @@ const checkOut = async (data: {
   };
 }) => {
   try {
-    const response = await api.post('/checkout', data);
+    // Ensure we send the current date in ISO format with timezone offset
+    const timestamp = new Date();
+    const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
+    
+    const response = await api.post('/attendance/checkout', {
+      ...data,
+      timezoneOffset // Send the client's timezone offset
+    });
     return response.data;
   } catch (error: any) {
     throw error.response?.data || { message: 'Error checking out' };
   }
 };
 
-// Get today's status
+// Helper function to format date in local timezone
+const formatLocalDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Get today's status with timezone support
 const getTodaysStatus = async () => {
   try {
-    const response = await api.get('/attendance/today');
-    return response.data;
+    // Get the user's timezone offset in hours
+    const timezoneOffset = -new Date().getTimezoneOffset() / 60;
+    
+    // Get today's date in local timezone
+    const today = formatLocalDate(new Date());
+    const response = await api.get(`/attendance/today?date=${today}&timezoneOffset=${timezoneOffset}`);
+    
+    // Handle case where data is nested under data property
+    const responseData = response.data?.data || response.data;
+    
+    // Handle case where status is 'checked_out' but checkInTime exists
+    const status = responseData.status || 'not_checked_in';
+    const isCheckedIn = status === 'checked_in';
+    const isCheckedOut = status === 'checked_out';
+    
+    // Transform the response to match our expected format
+    const result = {
+      status,
+      isCheckedIn,
+      needsCheckIn: !isCheckedIn && !isCheckedOut, // Only need check-in if not checked in or out
+      checkInTime: responseData.checkInTime || null,
+      checkOutTime: responseData.checkOutTime || null,
+      hoursWorked: responseData.hoursWorked || 0,
+      lastAction: responseData.lastAction || null
+    };
+    
+    console.log('Processed status:', result); // Debug log
+    return result;
   } catch (error: any) {
-    throw error.response?.data || { message: 'Error fetching today\'s status' };
+    console.error('Error in getTodaysStatus:', error);
+    // Return default status on error
+    return {
+      status: 'not_checked_in',
+      isCheckedIn: false,
+      needsCheckIn: true,
+      checkInTime: null,
+      checkOutTime: null,
+      hoursWorked: 0,
+      lastAction: null
+    };
   }
 };
 
@@ -106,36 +164,113 @@ const getAttendanceRecords = async (params: {
   }
 };
 
-// Get attendance summary
-const getAttendanceSummary = async (params: {
-  startDate?: string;
-  endDate?: string;
-  userId?: number;
-}) => {
+// Admin methods
+interface AttendanceByDateParams {
+  date: string;
+  userId?: string;
+}
+
+interface AttendanceSummaryParams {
+  startDate: string;
+  endDate: string;
+  userId?: string;
+}
+
+interface AttendanceRecord {
+  id: string;
+  userId: string;
+  userName: string;
+  checkIn: string;
+  checkOut?: string;
+  totalHours?: number;
+  status: 'present' | 'absent' | 'late' | 'half-day';
+}
+
+const getAttendanceByDate = async (params: AttendanceByDateParams): Promise<AttendanceRecord[]> => {
   try {
-    const response = await api.get('/attendance/summary', { params });
-    return response.data;
+    const { date, userId } = params;
+    const response = await api.get<{ data: Array<{
+      id: string;
+      user_id: number;
+      name: string;
+      email: string;
+      checkin_time: string | null;
+      checkout_time: string | null;
+      total_hours: number;
+      status: 'present' | 'absent' | 'late' | 'half-day';
+    }> }>('/admin/attendance', {
+      params: {
+        date,
+        userId,
+      },
+    });
+
+    // Map the backend response to the frontend's expected format
+    return response.data?.data?.map(record => ({
+      id: record.id,
+      userId: record.user_id.toString(),
+      userName: record.name, // Map name to userName
+      checkIn: record.checkin_time,
+      checkOut: record.checkout_time,
+      totalHours: record.total_hours,
+      status: record.status
+    })) || [];
   } catch (error: any) {
-    console.error('Error in getAttendanceSummary:', error);
+    console.error('Error fetching attendance by date:', error);
+    throw error.response?.data || { message: 'Error fetching attendance by date' };
+  }
+};
+
+const getUsers = async () => {
+  try {
+    const response = await api.get<{ data: Array<{ id: string; name: string; email: string }> }>('/admin/users');
+    return response.data?.data || [];
+  } catch (error: any) {
+    console.error('Error fetching users:', error);
+    throw error.response?.data || { message: 'Error fetching users' };
+  }
+};
+
+const getAttendanceSummary = async (params: AttendanceSummaryParams): Promise<AttendanceRecord[]> => {
+  try {
+    const { startDate, endDate, userId } = params;
+    const response = await api.get<{ data: any[] }>('/admin/attendance', {
+      params: {
+        startDate,
+        endDate,
+        userId,
+      },
+    });
+    
+    // Transform the response to match the expected format
+    return response.data?.data?.map(record => ({
+      id: record.id,
+      userId: record.user_id,
+      userName: record.name,
+      checkIn: record.checkin_time,
+      checkOut: record.checkout_time,
+      totalHours: record.total_hours || 0,
+      status: record.status || 'present' // Default to 'present' if status not provided
+    })) || [];
+  } catch (error: any) {
+    console.error('Error fetching attendance summary:', error);
     throw error.response?.data || { message: 'Error fetching attendance summary' };
   }
 };
 
-// Admin methods
-const getAttendanceByDate = async (date: Date) => {
-  const response = await api.get('/admin/attendance', {
-    params: {
-      date: date.toISOString().split('T')[0]
-    }
-  });
-  // Ensure we return an array, even if the response is empty or malformed
-  return Array.isArray(response.data?.data) ? response.data.data : [];
-};
-
-const getUsers = async () => {
-  const response = await api.get('/admin/users');
-  // Ensure we return an array, even if the response is empty or malformed
-  return Array.isArray(response.data?.data) ? response.data.data : [];
+const getEmployeeAttendance = async (userId: string, params: { startDate?: string; endDate?: string } = {}) => {
+  try {
+    const { startDate, endDate } = params;
+    const response = await api.get(`/admin/attendance/employee/${userId}`, {
+      params: {
+        startDate,
+        endDate,
+      },
+    });
+    return response.data?.data || [];
+  } catch (error: any) {
+    throw error.response?.data || { message: 'Error fetching employee attendance' };
+  }
 };
 
 export const attendanceService = {
@@ -146,4 +281,5 @@ export const attendanceService = {
   getAttendanceSummary,
   getAttendanceByDate,
   getUsers,
+  getEmployeeAttendance,
 };

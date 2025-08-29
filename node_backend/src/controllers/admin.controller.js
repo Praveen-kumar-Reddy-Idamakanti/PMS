@@ -1,10 +1,12 @@
 const { query, run } = require('../config/db');
 const { ROLES } = require('../config/roles');
 const { NotFoundError, BadRequestError } = require('../utils/errors');
+const bcrypt = require('bcryptjs');
 
 // Re-export the query and run functions for backward compatibility
 const dbQuery = query;
 const dbRun = run;
+
 
 // Get all users (admin only)
 const getAllUsers = async (req, res, next) => {
@@ -118,7 +120,7 @@ const getSystemStats = async (req, res, next) => {
       // Active users
       query('SELECT COUNT(*) as activeUsers FROM users WHERE is_active = 1').then(([row]) => row || { activeUsers: 0 }),
       // Admin users
-      query('SELECT COUNT(*) as adminUsers FROM users WHERE role IN (?, ?)', [ROLES.ADMIN, ROLES.SUPER_ADMIN])
+      query('SELECT COUNT(*) as adminUsers FROM users WHERE role IN (?, ?, ?)', [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.HR])
         .then(([row]) => row || { adminUsers: 0 }),
       // Recent users (last 7 days)
       query(`
@@ -204,8 +206,79 @@ const getUserActivity = async (req, res, next) => {
   }
 };
 
+// Create a new user (admin only)
+const createUser = async (req, res, next) => {
+  const { name, email, password, employeeId, role = ROLES.EMPLOYEE } = req.body;
+  const currentUserRole = req.user.role;
+
+  try {
+    // Validate input
+    if (!name || !email || !password || !employeeId) {
+      throw new BadRequestError('Name, email, password, and employee ID are required');
+    }
+
+    // Validate role
+    if (!Object.values(ROLES).includes(role)) {
+      throw new BadRequestError(`Invalid role. Must be one of: ${Object.values(ROLES).join(', ')}`);
+    }
+
+    // Role-based permission checks
+    if (currentUserRole === ROLES.ADMIN && role === ROLES.SUPER_ADMIN) {
+      throw new BadRequestError('You do not have permission to create a super admin user');
+    }
+
+    if (currentUserRole === ROLES.HR && 
+        ![ROLES.TEAM_LEADER, ROLES.EMPLOYEE, ROLES.INTERN].includes(role)) {
+      throw new BadRequestError('You can only create team leaders, employees, and interns');
+    }
+
+    if (currentUserRole === ROLES.TEAM_LEADER && 
+        ![ROLES.EMPLOYEE, ROLES.INTERN].includes(role)) {
+      throw new BadRequestError('You can only create employees and interns');
+    }
+
+    // Check if email already exists
+    const [existingUser] = await query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUser) {
+      throw new BadRequestError('Email already in use');
+    }
+
+    // Check if employee ID already exists
+    const [existingEmployee] = await query('SELECT id FROM users WHERE employee_id = ?', [employeeId]);
+    if (existingEmployee) {
+      throw new BadRequestError('Employee ID already in use');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const now = new Date().toISOString();
+
+    // Create user - let the database handle the auto-increment ID
+    const { insertId } = await run(
+      `INSERT INTO users (name, email, password, employee_id, role, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      [name, email, hashedPassword, employeeId, role, now, now]
+    );
+
+    // Get the created user (without password)
+    const [user] = await query(
+      'SELECT id, name, email, role, employee_id as employeeId, is_active as isActive, created_at as createdAt, updated_at as updatedAt FROM users WHERE id = ?',
+      [insertId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllUsers,
+  createUser,
   updateUserRole,
   deleteUser,
   getSystemStats,

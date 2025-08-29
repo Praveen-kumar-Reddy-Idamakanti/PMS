@@ -17,8 +17,10 @@ export const AttendanceManagement = () => {
   const { data: attendanceData, isLoading } = useQuery({
     queryKey: ['admin-attendance', date],
     queryFn: async () => {
-      const data = await attendanceService.getAttendanceByDate(date || new Date());
-      console.log('Attendance Data:', data); // Log the data to see its structure
+      if (!date) return [];
+      const formattedDate = format(date, 'yyyy-MM-dd');
+      const data = await attendanceService.getAttendanceByDate({ date: formattedDate });
+      console.log('Attendance Data:', data);
       return data;
     },
   });
@@ -84,23 +86,29 @@ export const AttendanceManagement = () => {
           <TableBody>
             {Array.isArray(attendanceData) && attendanceData.map((record) => (
               <TableRow key={record.id}>
-                <TableCell>{record.name || 'Unknown User'}</TableCell>
+                <TableCell>{record.userName || 'Unknown User'}</TableCell>
                 <TableCell>
-                  {record.checkin_time ? format(new Date(record.checkin_time), 'PPpp') : 'Not checked in'}
+                  {record.checkIn ? format(new Date(record.checkIn), 'PPpp') : 'Not checked in'}
                 </TableCell>
                 <TableCell>
-                  {record.checkout_time ? format(new Date(record.checkout_time), 'PPpp') : 'Not checked out'}
+                  {record.checkOut ? format(new Date(record.checkOut), 'PPpp') : 'Not checked out'}
                 </TableCell>
                 <TableCell>
-                  {record.total_hours ? `${record.total_hours.toFixed(2)}h` : 'Not checked out'}
+                  {record.totalHours ? `${record.totalHours.toFixed(2)}h` : 'Not checked out'}
                 </TableCell>
                 <TableCell>
                   <span className={`px-2 py-1 text-xs rounded-full ${
                     record.status === 'present' 
                       ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
+                      : record.status === 'half-day'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : record.status === 'late'
+                      ? 'bg-orange-100 text-orange-800'
+                      : 'bg-red-100 text-red-800'
                   }`}>
-                    {record.status === 'present' ? 'Present' : 'Absent'}
+                    {record.status === 'present' ? 'Present' : 
+                     record.status === 'half-day' ? 'Half Day' :
+                     record.status === 'late' ? 'Late' : 'Absent'}
                   </span>
                 </TableCell>
               </TableRow>

@@ -1,15 +1,25 @@
 const { getDB } = require('../config/db');
+const debug = require('debug')('app:models:attendance');
 
-// Debug function for attendance model
-const debugModel = (method, message, data = {}) => {
-    console.log('\n=== ATTENDANCE MODEL DEBUG ===');
-    console.log(`[${new Date().toISOString()}] ${method}`);
-    console.log('Message:', message);
-    if (Object.keys(data).length > 0) {
-        console.log('Data:', JSON.stringify(data, null, 2));
+// Enhanced debug function for attendance model
+function debugModel(method, message, data = {}) {
+    if (process.env.NODE_ENV !== 'test') {
+        const logData = {
+            timestamp: new Date().toISOString(),
+            method,
+            message,
+            ...(Object.keys(data).length > 0 && { data })
+        };
+        
+        debug(JSON.stringify(logData, null, 2));
+        
+        // Also log to console in development for better visibility
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`[${logData.timestamp}] [Attendance.${method}] ${message}`, 
+                Object.keys(data).length ? data : '');
+        }
     }
-    console.log('==============================\n');
-};
+}
 
 class Attendance {
     /**
@@ -26,55 +36,70 @@ class Attendance {
      * @returns {Promise<Object>} The created attendance record
      */
     static async create(attendanceData) {
+        debugModel('create', 'Creating new attendance record', { 
+            type: attendanceData.type,
+            userId: attendanceData.userId,
+            hasLocation: !!attendanceData.location,
+            hasPhoto: !!attendanceData.photo
+        });
+        
         const db = getDB();
-        const {
-            userId,
-            type,
-            notes = null,
-            location = null,
-            photo = null
-        } = attendanceData;
+        const { userId, type, notes, location, photo } = attendanceData;
+        const now = new Date().toISOString();
 
         return new Promise((resolve, reject) => {
+            const params = [
+                userId,
+                type,
+                now,
+                notes || null,
+                location?.latitude || null,
+                location?.longitude || null,
+                location?.address || null,
+                photo || null
+            ];
+            
+            debugModel('create', 'Executing database insert', { 
+                type,
+                userId,
+                timestamp: now,
+                hasNotes: !!notes,
+                hasLocation: !!location,
+                hasPhoto: !!photo
+            });
+            
             db.run(
-                `INSERT INTO attendance (
-                    user_id, 
-                    type, 
-                    timestamp, 
-                    notes, 
-                    latitude, 
-                    longitude, 
-                    address,
-                    photo
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    userId,
-                    type,
-                    new Date().toISOString(),
-                    notes,
-                    location?.latitude || null,
-                    location?.longitude || null,
-                    location?.address || null,
-                    photo
-                ],
+                `INSERT INTO attendance (user_id, type, timestamp, notes, latitude, longitude, address, photo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                params,
                 function(err) {
                     if (err) {
-                        console.error('Error creating attendance record:', err);
+                        debugModel('create', 'Database error', { 
+                            error: err.message,
+                            userId,
+                            type 
+                        });
                         return reject(err);
                     }
-                    resolve({
+                    
+                    const result = {
                         id: this.lastID,
                         userId,
                         type,
-                        timestamp: new Date().toISOString(),
-                        notes,
-                        location: location ? {
-                            latitude: location.latitude,
-                            longitude: location.longitude,
-                            address: location.address
-                        } : null,
-                        photo
+                        timestamp: now,
+                        notes: notes || null,
+                        location: location || null,
+                        photo: photo || null
+                    };
+                    
+                    debugModel('create', 'Attendance record created', { 
+                        recordId: result.id,
+                        type: result.type,
+                        userId: result.userId,
+                        timestamp: result.timestamp
                     });
+                    
+                    resolve(result);
                 }
             );
         });
@@ -142,89 +167,87 @@ class Attendance {
      * @param {string} userId - The ID of the user
      * @returns {Promise<Object>} Today's attendance record if exists, null otherwise
      */
-    static async getTodaysRecord(userId) {
+    /**
+     * Get today's attendance record for a user with timezone support
+     * @param {string} userId - The ID of the user
+     * @param {number} [timezoneOffset=0] - Timezone offset in hours
+     * @returns {Promise<Object>} Today's attendance record if exists, null otherwise
+     */
+    static async getTodaysRecord(userId, timezoneOffset = 0) {
+        debugModel('getTodaysRecord', 'Fetching today\'s attendance record', { userId, timezoneOffset });
+        
         const db = getDB();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        // Format dates in SQLite's date format (YYYY-MM-DD)
-        const todayStr = today.toISOString().split('T')[0];
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-        return new Promise((resolve, reject) => {
+        
+        // Calculate today's date in the user's timezone
+        const now = new Date();
+        const userNow = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
+        const userToday = userNow.toISOString().split('T')[0];
+        
+        return new Promise((resolve) => {
             db.get(
                 `SELECT * FROM attendance 
                 WHERE user_id = ? 
-                AND date(timestamp) >= date(?)
-                AND date(timestamp) < date(?)
+                AND date(datetime(timestamp, 'localtime')) = date(?)
                 ORDER BY timestamp DESC
                 LIMIT 1`,
-                [userId, todayStr, tomorrowStr],
+                [userId, userToday],
                 (err, row) => {
                     if (err) {
-                        console.error('Error fetching today\'s attendance:', err);
-                        return reject(err);
+                        debugModel('getTodaysRecord', 'Database error', { error: err.message, userId });
+                        return resolve(null);
                     }
-                    if (!row) return resolve(null);
-                    
-                    resolve({
-                        id: row.id,
-                        userId: row.user_id,
-                        type: row.type,
-                        timestamp: row.timestamp,
-                        notes: row.notes,
-                        location: row.latitude && row.longitude ? {
-                            latitude: row.latitude,
-                            longitude: row.longitude,
-                            address: row.address
-                        } : null,
-                        photo: row.photo
-                    });
+                    debugModel('getTodaysRecord', 'Record found', { record: row || 'No record found' });
+                    resolve(row || null);
                 }
             );
         });
     }
 
     /**
-     * Calculate worked hours for a user in a date range
+     * Check if user has checked in today with timezone support
      * @param {string} userId - The ID of the user
-     * @param {string} [startDate] - Start date (ISO string)
-     * @param {string} [endDate] - End date (ISO string)
-     * @returns {Promise<Object>} Object containing total hours and detailed records
+     * @param {number} [timezoneOffset=0] - Timezone offset in hours
+     * @returns {Promise<boolean>} True if user has checked in today
      */
-    /**
-     * Check if user has checked in today
-     * @param {string} userId - The ID of the user
-     * @returns {Promise<boolean>} True if user has checked in today, false otherwise
-     */
-    static async hasCheckedInToday(userId) {
+    static async hasCheckedInToday(userId, timezoneOffset = 0) {
+        debugModel('hasCheckedInToday', 'Checking if user checked in today', { userId, timezoneOffset });
         const db = getDB();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        // Format dates in SQLite's date format (YYYY-MM-DD)
-        const todayStr = today.toISOString().split('T')[0];
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-        return new Promise((resolve, reject) => {
+        
+        // Calculate today's date in the user's timezone
+        const now = new Date();
+        const userNow = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
+        const userToday = userNow.toISOString().split('T')[0];
+        
+        return new Promise((resolve) => {
             db.get(
-                `SELECT 1 FROM attendance 
+                `SELECT type FROM attendance 
                 WHERE user_id = ? 
-                AND type = 'checkin'
-                AND date(timestamp) >= date(?)
-                AND date(timestamp) < date(?)
+                AND date(datetime(timestamp, 'localtime')) = date(?)
+                ORDER BY timestamp DESC
                 LIMIT 1`,
-                [userId, todayStr, tomorrowStr],
-                (err, row) => {
+                [userId, userToday],
+                (err, latestRecord) => {
                     if (err) {
-                        console.error('Error checking today\'s check-in:', err);
-                        return reject(err);
+                        debugModel('hasCheckedInToday', 'Database error', { error: err.message, userId });
+                        return resolve(false);
                     }
-                    resolve(!!row);
+                    
+                    // If no records for today, user hasn't checked in
+                    if (!latestRecord) {
+                        debugModel('hasCheckedInToday', 'No records found for today', { userId });
+                        return resolve(false);
+                    }
+                    
+                    // If latest record is a check-in, user is checked in
+                    const isCheckedIn = latestRecord.type === 'checkin';
+                    
+                    debugModel('hasCheckedInToday', 'Check-in status', { 
+                        userId, 
+                        latestRecordType: latestRecord.type,
+                        isCheckedIn 
+                    });
+                    
+                    resolve(isCheckedIn);
                 }
             );
         });

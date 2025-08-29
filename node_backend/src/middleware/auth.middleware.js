@@ -130,11 +130,11 @@ const authorize = (allowedRoles = []) => {
 };
 
 /**
- * Middleware to check if the user is an admin
+ * Middleware to check if the user is an admin or HR
  * @returns {Function} Express middleware function
  */
 const isAdmin = (req, res, next) => {
-    return authorize([ROLES.ADMIN, ROLES.SUPER_ADMIN])(req, res, next);
+    return authorize([ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.HR])(req, res, next);
 };
 
 /**

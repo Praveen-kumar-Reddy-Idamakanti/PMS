@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Calendar from "./pages/Calendar";
 import Tasks from "./pages/Tasks";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import { AttendancePage } from "./pages/admin/AttendancePage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { RouteTransitionLoader } from "@/components/ui/RouteTransitionLoader";
@@ -91,14 +92,21 @@ const App = () => {
               <Route element={
                 <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]} />
               }>
-                <Route 
-                  path="/admin" 
-                  element={
+                <Route path="/admin">
+                  <Route index element={
                     <MainLayout>
                       <AdminDashboard />
                     </MainLayout>
-                  } 
-                />
+                  } />
+                  <Route 
+                    path="attendance" 
+                    element={
+                      <MainLayout>
+                        <AttendancePage />
+                      </MainLayout>
+                    } 
+                  />
+                </Route>
               </Route>
             </Route>
 

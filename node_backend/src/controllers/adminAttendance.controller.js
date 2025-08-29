@@ -6,6 +6,7 @@ const Attendance = require('../models/attendance.model');
 exports.getAllAttendance = async (req, res, next) => {
   try {
     const { startDate, endDate, userId: user_id, status, date } = req.query;
+    const currentUserRole = req.user.role;
     
     let sqlQuery = `
       SELECT a.*, u.name, u.email, u.employee_id, u.role 
@@ -14,6 +15,12 @@ exports.getAllAttendance = async (req, res, next) => {
       WHERE 1=1
     `;
     const params = [];
+
+    // If user is HR or Team Leader, only show their team's attendance
+    if (currentUserRole === 'hr' || currentUserRole === 'team_leader') {
+      sqlQuery += ' AND u.role IN (?, ?, ?)';
+      params.push('team_leader', 'employee', 'intern');
+    }
     
     if (startDate) {
       sqlQuery += ' AND timestamp >= ?';
@@ -198,38 +205,47 @@ exports.getAttendanceStats = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
     
-    // Base query to get all users with their attendance
-    let query = `
-      SELECT 
-        u.id as user_id,
-        u.name,
-        u.email,
-        u.role,
-        a.status,
-        a.date
-      FROM users u
-      LEFT JOIN attendance a ON u.id = a.user_id
-      WHERE 1=1
+    // Base query to get all users with their check-in/checkout records
+    let sqlQuery = `
+      WITH user_days AS (
+        SELECT 
+          u.id as user_id,
+          u.name,
+          u.email,
+          u.role,
+          DATE(a.timestamp) as date,
+          MAX(CASE WHEN a.type = 'checkin' THEN a.timestamp END) as checkin_time,
+          MAX(CASE WHEN a.type = 'checkout' THEN a.timestamp END) as checkout_time
+        FROM users u
+        LEFT JOIN attendance a ON u.id = a.user_id
+        WHERE 1=1
     `;
     
     const params = [];
     
     if (startDate) {
-      query += ' AND a.date >= ?';
-      params.push(new Date(startDate).toISOString());
+      sqlQuery += ' AND DATE(a.timestamp) >= ?';
+      params.push(startDate);
     }
     
     if (endDate) {
-      query += ' AND a.date <= ?';
-      params.push(new Date(endDate).toISOString());
+      sqlQuery += ' AND DATE(a.timestamp) <= ?';
+      params.push(endDate);
     }
     
-    const userAttendances = await query(query, params);
+    sqlQuery += `
+      GROUP BY u.id, u.name, u.email, u.role, DATE(a.timestamp)
+      ORDER BY u.id, date
+    )
+    SELECT * FROM user_days;
+    `;
+    
+    const attendanceRecords = await query(sqlQuery, params);
     
     // Group attendance by user
     const userStats = {};
     
-    userAttendances.forEach(row => {
+    attendanceRecords.forEach(row => {
       if (!userStats[row.user_id]) {
         userStats[row.user_id] = {
           user_id: row.user_id,
@@ -244,30 +260,33 @@ exports.getAttendanceStats = async (req, res, next) => {
         };
       }
       
-      if (row.status) {
-        const user = userStats[row.user_id];
-        user.totalDays++;
-        
-        if (row.status === 'present' || row.status === 'half-day') {
-          user.presentDays++;
-        }
-        
-        if (row.status === 'absent') user.absentDays++;
-        if (row.status === 'half-day') user.halfDays++;
-        if (row.status === 'on-leave') user.leaveDays++;
+      const user = userStats[row.user_id];
+      user.totalDays++;
+      
+      // Consider a user present if they have both check-in and check-out
+      if (row.checkin_time && row.checkout_time) {
+        user.presentDays++;
+      } else if (row.checkin_time || row.checkout_time) {
+        // Only check-in or check-out counts as half day
+        user.halfDays++;
+        user.presentDays += 0.5;
+      } else {
+        user.absentDays++;
       }
     });
     
     // Convert to array and calculate percentages
     const stats = Object.values(userStats).map(user => ({
       ...user,
+      // Round to 2 decimal places
       attendancePercentage: user.totalDays > 0 
-        ? Math.round((user.presentDays / user.totalDays) * 100) 
+        ? Math.round((user.presentDays / user.totalDays) * 100 * 100) / 100 
         : 0
     }));
     
     res.json({ success: true, data: stats });
   } catch (error) {
+    console.error('Error in getAttendanceStats:', error);
     next(error);
   }
 };

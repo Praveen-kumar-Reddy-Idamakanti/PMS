@@ -1,23 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AttendanceStatusCard } from "@/components/attendance/AttendanceStatusCard";
-import { CheckInOutModal } from "@/components/attendance/CheckInOutModal";
-import { Badge } from "@/components/ui/badge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
 import { 
-  LogOut, 
   Clock, 
   Calendar, 
   Users, 
   CheckCircle,
   ClipboardList,
-  Loader2
+  Loader2,
+  LogOut,
+  LogIn
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { format, parseISO } from "date-fns";
+import { CheckInOutModal } from "@/components/attendance/CheckInOutModal";
+import { toast } from "@/components/ui/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { attendanceService } from "@/services/attendance.service";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface User {
   id: string;
@@ -33,85 +34,153 @@ interface CheckInOutData {
     longitude: number;
     address: string;
   };
+  latitude?: number;
+  longitude?: number;
+  address?: string;
   notes?: string;
-  photo?: string; // Base64 encoded image string
+  photo?: string;
   type: 'checkin' | 'checkout';
+  timestamp?: string;
 }
 
-export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
+export interface TodayStatus {
+  status: 'checked_in' | 'checked_out' | 'not_checked_in';
+  isCheckedIn: boolean;
+  needsCheckIn: boolean;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  hoursWorked: number;
+  lastAction?: {
+    id: string;
+    type: 'checkin' | 'checkout';
+    timestamp: string;
+    notes?: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+      address?: string;
+    };
+  } | null;
+}
+
+interface DashboardProps {
+  user: User;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ user: propUser }) => {
+  const { user } = useAuth();
+  const currentUser = propUser || user;
+  // Initialize hooks
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  
+  // State for modal visibility and loading states
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
   const [isCheckOutModalOpen, setIsCheckOutModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // State for attendance tracking
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
+  const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
   const [hoursWorked, setHoursWorked] = useState(0);
-  
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  interface TodayStatus {
-    isCheckedIn: boolean;
-    checkInTime: string | null;
-    hoursWorked: number;
-  }
-
-  // Define the query function
+  // Define the query function with proper typing
   const fetchTodayStatus = useCallback(async (): Promise<TodayStatus> => {
     try {
       console.log('Fetching today\'s attendance status...');
       const response = await attendanceService.getTodaysStatus();
-      console.log('Today\'s status response:', response.data);
-      return response.data as TodayStatus;
+      console.log('Today\'s status response:', response);
+      
+      // Ensure we have a valid response with required fields
+      const status: TodayStatus = {
+        status: response.status || 'not_checked_in',
+        isCheckedIn: response.status === 'checked_in',
+        needsCheckIn: response.status !== 'checked_in',
+        checkInTime: response.checkInTime || null,
+        checkOutTime: response.checkOutTime || null,
+        hoursWorked: response.hoursWorked || 0,
+        lastAction: response.lastAction || null
+      };
+      
+      return status;
     } catch (error) {
       console.error('Error fetching today\'s status:', error);
-      return { isCheckedIn: false, checkInTime: null, hoursWorked: 0 };
+      return { 
+        status: 'not_checked_in',
+        isCheckedIn: false, 
+        needsCheckIn: true,
+        checkInTime: null, 
+        checkOutTime: null,
+        hoursWorked: 0 
+      };
     }
   }, []);
 
   // Fetch today's attendance status
   const { 
-    data: todayStatus,
-    isLoading: isLoadingTodayStatus, 
-    error: todayStatusError,
-    refetch: refetchTodayStatus 
+    data: todayStatus, 
+    isLoading: isLoadingStatus, 
+    error: statusError 
   } = useQuery<TodayStatus>({
-    queryKey: ['todayAttendance'],
+    queryKey: ['todayStatus'],
     queryFn: fetchTodayStatus,
-    initialData: () => {
-      const storedStatus = localStorage.getItem('todayAttendance');
-      return storedStatus 
-        ? JSON.parse(storedStatus) 
-        : { isCheckedIn: false, checkInTime: null, hoursWorked: 0 };
-    },
     refetchInterval: 60000, // Refetch every minute to update hours worked
+    initialData: () => {
+      // Initial data to prevent loading states if we have data in cache
+      const cachedData = queryClient.getQueryData<TodayStatus>(['todayStatus']);
+      return cachedData || {
+        status: 'not_checked_in',
+        isCheckedIn: false,
+        needsCheckIn: true,
+        checkInTime: null,
+        checkOutTime: null,
+        hoursWorked: 0,
+        lastAction: null
+      };
+    }
   });
+
+  // Update local state when query data changes
+  useEffect(() => {
+    if (todayStatus) {
+      setIsCheckedIn(todayStatus.isCheckedIn);
+      setCheckInTime(todayStatus.checkInTime);
+      setHoursWorked(todayStatus.hoursWorked);
+    }
+  }, [todayStatus]);
 
   // Update local state and localStorage when todayStatus changes
   useEffect(() => {
     if (todayStatus) {
       console.log('Updating local state with today\'s status:', todayStatus);
-      setIsCheckedIn(todayStatus.isCheckedIn || false);
+      const checkedIn = todayStatus.status === 'checked_in';
+      setIsCheckedIn(checkedIn);
       setCheckInTime(todayStatus.checkInTime || null);
       setHoursWorked(todayStatus.hoursWorked || 0);
       
       // Persist to localStorage for better UX on refresh
       localStorage.setItem('todayAttendance', JSON.stringify(todayStatus));
+      
+      // Update modal states based on current status
+      if (checkedIn) {
+        setIsCheckInModalOpen(false);
+        setIsCheckOutModalOpen(false);
+      }
     }
   }, [todayStatus]);
 
   // Handle query errors
   useEffect(() => {
-    if (todayStatusError) {
-      console.error('Error in today\'s status query:', todayStatusError);
+    if (statusError) {
+      console.error('Error in today\'s status query:', statusError);
       toast({
         title: 'Error',
         description: 'Failed to fetch today\'s attendance status',
         variant: 'destructive',
       });
     }
-  }, [todayStatusError]);
+  }, [statusError]);
 
   interface WeeklySummary {
     totalHours: number;
@@ -120,9 +189,10 @@ export default function Dashboard() {
 
   // Fetch weekly hours summary
   const { 
-    data: weeklySummary,
-    error: weeklySummaryError 
-  } = useQuery<WeeklySummary>({
+    data: weeklySummary = { totalHours: 0, changeFromLastWeek: 0 },
+    error: weeklySummaryError,
+    isLoading: isLoadingWeeklySummary
+  } = useQuery<WeeklySummary, Error>({
     queryKey: ['weeklySummary'],
     queryFn: async (): Promise<WeeklySummary> => {
       try {
@@ -130,26 +200,37 @@ export default function Dashboard() {
           startDate: format(new Date(new Date().setDate(new Date().getDate() - 7)), 'yyyy-MM-dd'),
           endDate: format(new Date(), 'yyyy-MM-dd')
         });
-        return response.data as WeeklySummary;
+        
+        // Calculate total hours from attendance records
+        const totalHours = response.reduce((sum, record) => {
+          return sum + (record.totalHours || 0);
+        }, 0);
+        
+        // For demo purposes, we'll use a fixed change value
+        // In a real app, you'd compare with the previous period
+        const changeFromLastWeek = 0; 
+        
+        return { totalHours, changeFromLastWeek };
       } catch (error) {
         console.error('Error fetching weekly summary:', error);
         return { totalHours: 0, changeFromLastWeek: 0 };
       }
     },
-    initialData: { totalHours: 0, changeFromLastWeek: 0 },
     staleTime: 5 * 60 * 1000 // 5 minutes
   });
 
   // Handle weekly summary errors
   useEffect(() => {
     if (weeklySummaryError) {
+      console.error('Error fetching weekly summary:', weeklySummaryError);
       toast({
         title: 'Error',
-        description: 'Failed to fetch weekly summary data',
-        variant: 'destructive',
+        description: 'Failed to load weekly summary',
+        variant: 'destructive'
       });
     }
   }, [weeklySummaryError]);
+
 
   // Load user data
   useEffect(() => {
@@ -158,56 +239,66 @@ export default function Dashboard() {
       navigate('/login');
       return;
     }
-
-    const parsedUser = JSON.parse(userData);
-    setUser(parsedUser);
   }, [navigate]);
 
   const handleCheckIn = async (data: CheckInOutData) => {
     setIsLoading(true);
     
     try {
-      const checkInData: any = {
-        type: 'checkin',
-        location: data.location ? {
-          latitude: data.location.latitude,
-          longitude: data.location.longitude,
-          address: data.location.address || 'Location not available'
-        } : undefined,
-        notes: 'Checked in from dashboard'
-      };
-
-      // Only include photo if it exists
-      if (data.photo) {
-        checkInData.photo = data.photo;
+      // First get current status to prevent race conditions
+      const currentStatus = await attendanceService.getTodaysStatus();
+      
+      if (currentStatus.status === 'checked_in') {
+        throw new Error('You have already checked in today');
+      }
+      
+      if (currentStatus.status === 'checked_out') {
+        throw new Error('You have already checked out for today');
       }
 
-      const response = await attendanceService.checkIn(checkInData);
+      const checkInData: any = {
+        ...data,
+        type: 'checkin',
+        timestamp: new Date().toISOString(),
+      };
       
-      // Immediately update the UI state
-      const now = new Date().toISOString();
-      setIsCheckedIn(true);
-      setCheckInTime(now);
-      setHoursWorked(0);
+      // Check if we have valid location data
+      if (!data.location?.latitude || !data.location?.longitude) {
+        throw new Error('Please allow location access to check in');
+      }
+
+      // Call the checkIn service with the location data
+      await attendanceService.checkIn(checkInData);
       
-      // Invalidate and refetch today's status to ensure data consistency
-      await queryClient.invalidateQueries({ 
-        queryKey: ['todayAttendance'],
-        refetchType: 'active' // Force immediate refetch
+      // Invalidate and refetch today's status
+      await queryClient.invalidateQueries({ queryKey: ['todayStatus'] });
+      
+      // Get the updated status
+      const updatedStatus = await queryClient.fetchQuery({
+        queryKey: ['todayStatus'],
+        queryFn: attendanceService.getTodaysStatus,
       });
       
-      toast({
-        title: 'Checked in successfully!',
-        description: 'Your attendance has been recorded.',
-      });
-      
-      setIsCheckInModalOpen(false);
+      // Verify the check-in was successful
+      if (updatedStatus?.status === 'checked_in' || updatedStatus?.isCheckedIn) {
+        toast({
+          title: 'Checked in successfully!',
+          description: `You're now checked in at ${new Date().toISOString()}`,
+        });
+        setIsCheckInModalOpen(false);
+      } else {
+        console.error('Check-in verification failed. Status:', updatedStatus);
+        throw new Error('Failed to verify check-in status. Please refresh and try again.');
+      }
     } catch (error) {
+      console.error('Check-in error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred during check-in';
       toast({
-        title: "Check-in failed",
-        description: "Please try again.",
-        variant: "destructive",
+        title: 'Check-in failed',
+        description: errorMessage,
+        variant: 'destructive',
       });
+      throw error; // Re-throw to allow the modal to handle the error
     } finally {
       setIsLoading(false);
     }
@@ -215,40 +306,60 @@ export default function Dashboard() {
 
   const handleCheckOut = async (data: CheckInOutData) => {
     setIsLoading(true);
-    
     try {
-      await attendanceService.checkOut({
-        location: data.location ? {
-          latitude: data.location.latitude,
-          longitude: data.location.longitude,
-          address: data.location.address || 'Location not available'
-        } : undefined,
-        notes: 'Checked out from dashboard'
+      // First, refresh the latest status from the server
+      await queryClient.invalidateQueries({ queryKey: ['todayStatus'] });
+      const currentStatus = await queryClient.fetchQuery({
+        queryKey: ['todayStatus'],
+        queryFn: fetchTodayStatus,
       });
+
+      // If already checked out, just show message and close modal
+      if (currentStatus.status === 'checked_out') {
+        toast({
+          title: 'Already Checked Out',
+          description: 'Your check-out was already recorded.',
+          variant: 'default'
+        });
+        setIsCheckOutModalOpen(false);
+        return true;
+      }
+
+      // If not checked in, prevent check out
+      if (currentStatus.status !== 'checked_in') {
+        throw new Error('You need to check in before checking out');
+      }
+
+      // Proceed with check out
+      const checkOutData: any = {
+        ...data,
+        type: 'checkout',
+        timestamp: new Date().toISOString(),
+      };
+
+      const response = await attendanceService.checkOut(checkOutData);
       
-      // Immediately update the UI state
-      setIsCheckedIn(false);
-      setCheckInTime(null);
-      setHoursWorked(0);
+      // Refresh the latest status after check out
+      await queryClient.invalidateQueries({ queryKey: ['todayStatus'] });
       
-      // Invalidate and refetch today's status to ensure data consistency
-      await queryClient.invalidateQueries({ 
-        queryKey: ['todayAttendance'],
-        refetchType: 'active' // Force immediate refetch
-      });
-      
+      // Show success message
       toast({
-        title: 'Checked out successfully!',
-        description: 'Your working hours have been recorded.',
+        title: 'Checked Out Successfully',
+        description: `You've checked out at ${new Date().toISOString()}`,
+        variant: 'default'
       });
       
       setIsCheckOutModalOpen(false);
+      return true;
     } catch (error) {
+      console.error('Check-out error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred during check-out';
       toast({
-        title: "Check-out failed",
-        description: "Please try again.",
-        variant: "destructive",
+        title: 'Check-out failed',
+        description: errorMessage,
+        variant: 'destructive',
       });
+      throw error; // Re-throw to allow the modal to handle the error
     } finally {
       setIsLoading(false);
     }
@@ -266,40 +377,112 @@ export default function Dashboard() {
     return 'critical';
   };
 
-  if (!user) {
-    return <div>Loading...</div>;
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading user data...</span>
+      </div>
+    );
   }
 
   const attendanceData = {
     hoursWorked,
     status: getAttendanceStatus(),
-    checkInTime,
-    checkOutTime: isCheckedIn ? undefined : new Date().toISOString(),
+    checkInTime: todayStatus?.checkInTime || checkInTime,
+    checkOutTime: todayStatus?.checkOutTime || (isCheckedIn ? undefined : new Date().toISOString()),
     date: format(new Date(), 'EEEE, MMMM do, yyyy'),
-    isCheckedIn,
+    isCheckedIn: todayStatus?.status === 'checked_in' || isCheckedIn,
   };
 
-  return (
-    <div className="min-h-screen bg-background">
-      
+  const renderAttendanceStatus = () => (
+    <div className="lg:col-span-2">
+      {/* Attendance Status */}
+      <Card className="shadow-medium">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Clock className="w-5 h-5 text-primary" />
+            <span>Attendance Status</span>
+          </CardTitle>
+          <CardDescription>
+            Your current attendance status
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Status:</span>
+            <Badge variant={todayStatus?.status === 'checked_out' ? 'secondary' : 'default'}> 
+              {todayStatus?.status === 'checked_in' ? 'Checked In' : 
+               todayStatus?.status === 'checked_out' ? 'Checked Out' : 'Not Checked In'}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Hours Worked:</span>
+            <span className="text-sm font-medium">{hoursWorked.toFixed(1)}h</span>
+          </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Check-in Time:</span>
+            <span className="text-sm font-medium">{attendanceData.checkInTime}</span>
+          </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Check-out Time:</span>
+            <span className="text-sm font-medium">{attendanceData.checkOutTime}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 
+  const renderCheckInButton = () => (
+    <Button
+      onClick={() => setIsCheckInModalOpen(true)}
+      disabled={isLoading || isLoadingStatus}
+      className="w-full"
+    >
+      {isLoading || isLoadingStatus ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <LogIn className="mr-2 h-4 w-4" />
+      )}
+      Check In
+    </Button>
+  );
+
+  const renderCheckOutButton = () => (
+    <Button
+      onClick={() => setIsCheckOutModalOpen(true)}
+      disabled={isLoading || isLoadingStatus}
+      variant="outline"
+      className="w-full"
+    >
+      {isLoading || isLoadingStatus ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <LogOut className="mr-2 h-4 w-4" />
+      )}
+      Check Out
+    </Button>
+  );
+
+  return (
+    <div className="min-h-screen bg-background p-6">
       <div className="container mx-auto px-4 py-6">
         {/* Welcome Section */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold text-foreground">
-                Welcome back, {user.name}! 👋
+                Welcome back, {currentUser?.name || 'User'}! 👋
               </h2>
               <Badge variant="outline" className="px-2 py-1 text-xs">
-                {user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()}
+                {currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1).toLowerCase() : 'User'}
               </Badge>
             </div>
             <p className="text-muted-foreground mt-1">
               {format(new Date(), 'EEEE, MMMM do, yyyy')}
             </p>
           </div>
-          {(user.role === 'admin' || user.role === 'team_leader') && (
+          {(currentUser?.role === 'admin' || currentUser?.role === 'team_leader') && (
             <Button 
               variant="outline" 
               onClick={() => navigate('/register')}
@@ -312,10 +495,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Attendance Status */}
-          <div className="lg:col-span-2">
-            <AttendanceStatusCard attendance={attendanceData} />
-          </div>
+          {renderAttendanceStatus()}
 
           {/* Quick Actions */}
           <Card className="shadow-medium">
@@ -329,26 +509,30 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {!isCheckedIn ? (
-                <Button
-                  variant="status"
-                  className="w-full"
-                  onClick={() => setIsCheckInModalOpen(true)}
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Check In
-                </Button>
-              ) : (
-                <Button
-                  variant="status-warning"
-                  className="w-full"
-                  onClick={() => setIsCheckOutModalOpen(true)}
-                >
-                  <Clock className="w-4 h-4 mr-2" />
-                  Check Out
-                </Button>
-              )}
-              
+              <div className="mt-6 space-y-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Status:</span>
+                  <Badge variant={todayStatus?.status === 'checked_out' ? 'secondary' : 'default'}> 
+                    {todayStatus?.status === 'checked_in' ? 'Checked In' : 
+                     todayStatus?.status === 'checked_out' ? 'Checked Out' : 'Not Checked In'}
+                  </Badge>
+                </div>
+                
+                {todayStatus?.status === 'checked_out' ? (
+                  <Button
+                    variant="outline"
+                    className="w-full cursor-not-allowed opacity-70"
+                    disabled
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Check In (Completed for today)
+                  </Button>
+                ) : todayStatus?.status === 'checked_in' ? (
+                  renderCheckOutButton()
+                ) : (
+                  renderCheckInButton()
+                )}
+              </div>
               <Button variant="outline" className="w-full" onClick={() => navigate('/calendar')}>
                 <Calendar className="w-4 h-4 mr-2" />
                 View Calendar
@@ -360,11 +544,10 @@ export default function Dashboard() {
               </Button>
             </CardContent>
           </Card>
-        </div>
+        </div> 
 
-        {/* Dashboard Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="shadow-soft hover:shadow-medium transition-shadow">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="shadow-soft hover:shadow-medium transition-shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 This Week
@@ -372,12 +555,13 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-800">
-                {weeklySummary?.totalHours ? `${weeklySummary.totalHours.toFixed(1)}h` : '0h'}
+                {isLoadingWeeklySummary ? 'Loading...' : `${weeklySummary.totalHours.toFixed(1)}h`}
               </div>
               <p className="text-xs text-gray-500">
-                {weeklySummary?.changeFromLastWeek ? 
-                  `${weeklySummary.changeFromLastWeek >= 0 ? '+' : ''}${weeklySummary.changeFromLastWeek.toFixed(1)}h from last week` : 
-                  'No data from last week'}
+{isLoadingWeeklySummary ? '...' : 
+                  weeklySummary.changeFromLastWeek !== undefined ? 
+                    `${weeklySummary.changeFromLastWeek >= 0 ? '+' : ''}${weeklySummary.changeFromLastWeek.toFixed(1)}h from last week` : 
+                    'No data from last week'}
               </p>
             </CardContent>
           </Card>
@@ -429,20 +613,21 @@ export default function Dashboard() {
       {/* Check In Modal */}
       <CheckInOutModal
         isOpen={isCheckInModalOpen}
-        onClose={() => setIsCheckInModalOpen(false)}
+        onClose={() => !isLoading && setIsCheckInModalOpen(false)}
         type="checkin"
         onSubmit={handleCheckIn}
         isLoading={isLoading}
       />
-
-      {/* Check Out Modal */}
       <CheckInOutModal
         isOpen={isCheckOutModalOpen}
-        onClose={() => setIsCheckOutModalOpen(false)}
+        onClose={() => !isLoading && setIsCheckOutModalOpen(false)}
         type="checkout"
         onSubmit={handleCheckOut}
         isLoading={isLoading}
       />
     </div>
   );
-}
+};
+
+// Export as default for App.tsx
+export default Dashboard;

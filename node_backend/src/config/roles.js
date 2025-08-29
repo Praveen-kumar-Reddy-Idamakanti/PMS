@@ -6,20 +6,20 @@
 const ROLES = {
   SUPER_ADMIN: 'super_admin',
   ADMIN: 'admin',
-  MANAGER: 'manager',
+  HR: 'hr',
   TEAM_LEADER: 'team_leader',
-  MEMBER: 'member',
-  GUEST: 'guest',
+  EMPLOYEE: 'employee',
+  INTERN: 'intern',
 };
 
 // Role hierarchy - higher number means more permissions
 const ROLE_LEVELS = {
   [ROLES.SUPER_ADMIN]: 100,
   [ROLES.ADMIN]: 90,
-  [ROLES.MANAGER]: 80,
+  [ROLES.HR]: 80,
   [ROLES.TEAM_LEADER]: 70,
-  [ROLES.MEMBER]: 50,
-  [ROLES.GUEST]: 10,
+  [ROLES.EMPLOYEE]: 50,
+  [ROLES.INTERN]: 10,
 };
 
 /**

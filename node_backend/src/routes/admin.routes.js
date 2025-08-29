@@ -5,12 +5,13 @@ const attendanceController = require('../controllers/adminAttendance.controller'
 const authMiddleware = require('../middleware/auth.middleware');
 const { ROLES } = require('../config/roles');
 
-// Protect all routes with authentication and admin authorization
+// Protect all routes with authentication and admin/HR authorization
 router.use(authMiddleware.authenticate);
-router.use(authMiddleware.authorize([ROLES.ADMIN, ROLES.SUPER_ADMIN]));
+router.use(authMiddleware.authorize([ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.HR]));
 
 // User management routes
 router.get('/users', adminController.getAllUsers);
+router.post('/users', adminController.createUser);
 router.patch('/users/:userId/role', adminController.updateUserRole);
 router.delete('/users/:userId', adminController.deleteUser);
 

@@ -7,22 +7,22 @@ const { validationResult } = require('express-validator');
  * @param {string} message - Debug message
  * @param {Object} data - Additional debug data
  */
-const debugAttendance = (req, message, data = {}) => {
-    console.log('\n=== ATTENDANCE CONTROLLER DEBUG ===');
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-    console.log('User ID:', req.user?.id);
-    console.log('Message:', message);
-    if (Object.keys(data).length > 0) {
-        console.log('Data:', JSON.stringify(data, null, 2));
-    }
-    if (req.body) {
-        console.log('Request Body:', JSON.stringify({
-            ...req.body,
-            photo: req.body.photo ? '***PHOTO_DATA***' : undefined
-        }, null, 2));
-    }
-    console.log('==================================\n');
-};
+// const debugAttendance = (req, message, data = {}) => {
+//     console.log('\n=== ATTENDANCE CONTROLLER DEBUG ===');
+//     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+//     console.log('User ID:', req.user?.id);
+//     console.log('Message:', message);
+//     if (Object.keys(data).length > 0) {
+//         console.log('Data:', JSON.stringify(data, null, 2));
+//     }
+//     if (req.body) {
+//         console.log('Request Body:', JSON.stringify({
+//             ...req.body,
+//             photo: req.body.photo ? '***PHOTO_DATA***' : undefined
+//         }, null, 2));
+//     }
+//     console.log('==================================\n');
+// };
 
 /**
  * Handle check-in for a user
@@ -43,8 +43,9 @@ const checkIn = async (req, res) => {
         const { notes, location, photo } = req.body;
         const userId = req.user.id;
 
-        // Check if user already checked in today
-        const todayRecord = await Attendance.getTodaysRecord(userId);
+        // Check if user already checked in today (considering timezone)
+        const timezoneOffset = req.body.timezoneOffset || 0; // Get timezone offset in hours
+        const todayRecord = await Attendance.getTodaysRecord(userId, timezoneOffset);
         if (todayRecord && todayRecord.type === 'checkin') {
             return res.status(400).json({
                 success: false,
@@ -84,57 +85,82 @@ const checkIn = async (req, res) => {
  */
 const checkOut = async (req, res) => {
     try {
-        // Validate request
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            return res.status(400).json({ 
-                success: false, 
-                errors: errors.array() 
-            });
+            return res.status(400).json({ success: false, errors: errors.array() });
         }
-
         const { notes, location, photo } = req.body;
         const userId = req.user.id;
 
-        // Check if user has checked in today
-        const todayRecord = await Attendance.getTodaysRecord(userId);
-        if (!todayRecord || todayRecord.type === 'checkout') {
-            return res.status(400).json({
-                success: false,
-                message: 'You need to check in first'
+        // First check if user has already checked out today (considering timezone)
+        const timezoneOffset = req.body.timezoneOffset || 0; // Get timezone offset in hours
+        const db = require('../config/db').getDB();
+        
+        // Calculate today's date in the user's timezone
+        const now = new Date();
+        const userNow = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
+        const userToday = userNow.toISOString().split('T')[0];
+        
+        const hasCheckedOut = await new Promise((resolve) => {
+            db.get(
+                `SELECT 1 FROM attendance 
+                WHERE user_id = ? 
+                AND type = 'checkout'
+                AND date(datetime(timestamp, 'localtime')) = date(?)
+                LIMIT 1`,
+                [userId, userToday],
+                (err, row) => {
+                    if (err) {
+                        console.error('Error checking existing checkout:', err);
+                        return resolve(false);
+                    }
+                    resolve(!!row);
+                }
+            );
+        });
+
+        if (hasCheckedOut) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'You have already checked out today' 
             });
         }
 
-        // Create check-out record
-        const checkOut = await Attendance.create({
-            userId,
-            type: 'checkout',
-            notes,
-            location,
-            photo
+        // Then verify they have checked in today (considering timezone)
+        const hasCheckedIn = await Attendance.hasCheckedInToday(userId, timezoneOffset);
+        if (!hasCheckedIn) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'You need to check in before checking out' 
+            });
+        }
+
+        // Create the checkout record
+        const checkOut = await Attendance.create({ 
+            userId, 
+            type: 'checkout', 
+            notes, 
+            location, 
+            photo 
         });
+        
+        // Calculate hours worked for today (in user's timezone)
+        const { totalHours } = await Attendance.calculateWorkedHours(userId, userToday);
 
-        // Calculate hours worked today
-        const { totalHours } = await Attendance.calculateWorkedHours(
-            userId,
-            new Date().toISOString().split('T')[0]
-        );
-
-        res.status(201).json({
-            success: true,
-            message: 'Checked out successfully',
-            data: {
-                ...checkOut,
-                hoursWorkedToday: totalHours
-            }
+        res.status(201).json({ 
+            success: true, 
+            message: 'Checked out successfully', 
+            data: { 
+                ...checkOut, 
+                hoursWorkedToday: totalHours 
+            } 
         });
-
     } catch (error) {
         console.error('Check-out error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error processing check-out',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error processing check-out', 
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined 
         });
     }
 };
@@ -193,24 +219,29 @@ const getAttendanceRecords = async (req, res) => {
 
 
 /**
- * Get today's attendance status for a user
+ * Get today's attendance status for a user with timezone support
  * @route GET /api/attendance/today
  * @access Private
  */
 const getTodaysStatus = async (req, res) => {
     try {
         const userId = req.user.id;
+        const timezoneOffset = parseInt(req.query.timezoneOffset) || 0; // Get timezone offset in hours
+        
+        // Calculate today's date in the user's timezone
+        const now = new Date();
+        const userNow = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
+        const userToday = userNow.toISOString().split('T')[0];
         
         // Get today's check-in and check-out records
-        const today = new Date().toISOString().split('T')[0];
         const records = await new Promise((resolve, reject) => {
             const db = require('../config/db').getDB();
             db.all(
                 `SELECT * FROM attendance 
                 WHERE user_id = ? 
-                AND date(timestamp) = date(?)
+                AND date(datetime(timestamp, 'localtime')) = date(?)
                 ORDER BY timestamp`,
-                [userId, today],
+                [userId, userToday],
                 (err, rows) => {
                     if (err) return reject(err);
                     resolve(rows || []);
@@ -218,28 +249,40 @@ const getTodaysStatus = async (req, res) => {
             );
         });
 
-        // Find the latest check-in and check-out
-        const checkInRecord = records.find(r => r.type === 'checkin');
-        const checkOutRecord = records.find(r => r.type === 'checkout');
-        const latestRecord = records[records.length - 1];
-
-        // Calculate hours worked if checked in but not checked out
-        let hoursWorked = 0;
-        if (checkInRecord && !checkOutRecord) {
-            const checkInTime = new Date(checkInRecord.timestamp);
-            const now = new Date();
-            hoursWorked = (now - checkInTime) / (1000 * 60 * 60); // Convert ms to hours
-        } else if (checkInRecord && checkOutRecord) {
-            const checkInTime = new Date(checkInRecord.timestamp);
-            const checkOutTime = new Date(checkOutRecord.timestamp);
-            hoursWorked = (checkOutTime - checkInTime) / (1000 * 60 * 60);
+        // Process all records in chronological order to determine current status
+        let checkInRecord = null;
+        let checkOutRecord = null;
+        let currentStatus = 'not_checked_in';
+        
+        // Process records in chronological order
+        for (const record of records) {
+            if (record.type === 'checkin') {
+                checkInRecord = record;
+                checkOutRecord = null; // Reset check-out if user checks in again
+                currentStatus = 'checked_in';
+            } else if (record.type === 'checkout') {
+                checkOutRecord = record;
+                currentStatus = 'checked_out';
+            }
         }
+
+        // Calculate hours worked if applicable
+        let hoursWorked = 0;
+        if (checkInRecord) {
+            const checkInTime = new Date(checkInRecord.timestamp);
+            const endTime = checkOutRecord ? new Date(checkOutRecord.timestamp) : new Date();
+            hoursWorked = (endTime - checkInTime) / (1000 * 60 * 60); // Convert ms to hours
+        }
+
+        // Get the latest record for additional details
+        const latestRecord = records[records.length - 1] || null;
 
         res.json({
             success: true,
             data: {
-                status: latestRecord ? latestRecord.type : 'not_checked_in',
-                isCheckedIn: latestRecord?.type === 'checkin',
+                status: currentStatus,
+                isCheckedIn: currentStatus === 'checked_in',
+                needsCheckIn: currentStatus === 'checked_out' || currentStatus === 'not_checked_in',
                 checkInTime: checkInRecord?.timestamp || null,
                 checkOutTime: checkOutRecord?.timestamp || null,
                 hoursWorked: Math.round(hoursWorked * 100) / 100, // Round to 2 decimal places
@@ -253,7 +296,8 @@ const getTodaysStatus = async (req, res) => {
                         longitude: latestRecord.longitude,
                         address: latestRecord.address
                     } : null
-                } : null
+                } : null,
+                date: userToday // Include the date used for the query
             }
         });
 
