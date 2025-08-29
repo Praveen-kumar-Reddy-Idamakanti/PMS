@@ -16,6 +16,7 @@ import { AttendancePage } from "./pages/admin/AttendancePage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { RouteTransitionLoader } from "@/components/ui/RouteTransitionLoader";
+import { ActivityLog } from "./pages/admin/components";
 
 // Debug component to log route changes and auth state
 const DebugRouter = () => {
@@ -89,25 +90,13 @@ const App = () => {
               } />
               
               {/* Admin Routes - Only accessible by super_admin */}
-              <Route element={
-                <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]} />
-              }>
-                <Route path="/admin">
-                  <Route index element={
-                    <MainLayout>
-                      <AdminDashboard />
-                    </MainLayout>
-                  } />
-                  <Route 
-                    path="attendance" 
-                    element={
-                      <MainLayout>
-                        <AttendancePage />
-                      </MainLayout>
-                    } 
-                  />
-                </Route>
-              </Route>
+              <Route path="/admin/*" element={
+                <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
+                  <MainLayout>
+                    <AdminDashboard />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
             </Route>
 
             <Route path="*" element={

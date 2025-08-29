@@ -5,12 +5,14 @@ import { UserRole } from '@/types/user';
 interface ProtectedRouteProps {
   allowedRoles?: UserRole[];
   redirectTo?: string;
+  children?: React.ReactNode;
 }
 
 export const ProtectedRoute = ({
   allowedRoles = [],
   redirectTo = '/login',
-}: ProtectedRouteProps) => {
+  children
+}: ProtectedRouteProps & { children?: React.ReactNode }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -24,7 +26,7 @@ export const ProtectedRoute = ({
 
   // If no specific roles are required, allow access
   if (allowedRoles.length === 0) {
-    return <Outlet />;
+    return children ? <>{children}</> : <Outlet />;
   }
 
   // Check if user has any of the required roles
@@ -35,5 +37,5 @@ export const ProtectedRoute = ({
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Outlet />;
+  return children ? <>{children}</> : <Outlet />;
 };

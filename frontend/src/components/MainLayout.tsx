@@ -66,7 +66,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                   to="/admin"
                   className={cn(
                     'text-sm font-medium transition-colors hover:text-primary',
-                    location.pathname.startsWith('/admin') ? 'text-primary' : 'text-muted-foreground'
+                    (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) ? 'text-primary' : 'text-muted-foreground'
                   )}
                 >
                   Admin
