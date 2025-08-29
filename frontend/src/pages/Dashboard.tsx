@@ -422,11 +422,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user: propUser }) => {
           </div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Check-in Time:</span>
-            <span className="text-sm font-medium">{attendanceData.checkInTime}</span>
+            <span className="text-sm font-medium">
+              {attendanceData.checkInTime ? format(parseISO(attendanceData.checkInTime), 'h:mm a') : '--:--'}
+            </span>
           </div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Check-out Time:</span>
-            <span className="text-sm font-medium">{attendanceData.checkOutTime}</span>
+            <span className="text-sm font-medium">
+              {attendanceData.checkOutTime ? format(parseISO(attendanceData.checkOutTime), 'h:mm a') : '--:--'}
+            </span>
           </div>
         </CardContent>
       </Card>
