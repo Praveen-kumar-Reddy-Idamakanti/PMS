@@ -190,16 +190,20 @@ interface AttendanceRecord {
 const getAttendanceByDate = async (params: AttendanceByDateParams): Promise<AttendanceRecord[]> => {
   try {
     const { date, userId } = params;
-    const response = await api.get<{ data: Array<{
+    interface AttendanceApiResponse {
       id: string;
       user_id: number;
+      employee_id?: string;
       name: string;
       email: string;
       checkin_time: string | null;
       checkout_time: string | null;
       total_hours: number;
       status: 'present' | 'absent' | 'late' | 'half-day';
-    }> }>('/admin/attendance', {
+      date?: string;
+    }
+
+    const response = await api.get<{ data: AttendanceApiResponse[] }>('/admin/attendance', {
       params: {
         date,
         userId,
@@ -210,11 +214,13 @@ const getAttendanceByDate = async (params: AttendanceByDateParams): Promise<Atte
     return response.data?.data?.map(record => ({
       id: record.id,
       userId: record.user_id.toString(),
-      userName: record.name, // Map name to userName
+      userName: record.name,
+      employeeId: record.employee_id || undefined, // Use employee_id from backend if available
       checkIn: record.checkin_time,
       checkOut: record.checkout_time,
       totalHours: record.total_hours,
-      status: record.status
+      status: record.status,
+      date: record.date || (record.checkin_time ? record.checkin_time.split('T')[0] : '')
     })) || [];
   } catch (error: any) {
     console.error('Error fetching attendance by date:', error);
@@ -246,12 +252,14 @@ const getAttendanceSummary = async (params: AttendanceSummaryParams): Promise<At
     // Transform the response to match the expected format
     return response.data?.data?.map(record => ({
       id: record.id,
-      userId: record.user_id,
+      userId: record.user_id.toString(),
       userName: record.name,
+      employeeId: record.employee_id || undefined, // Use employee_id from backend if available
       checkIn: record.checkin_time,
       checkOut: record.checkout_time,
       totalHours: record.total_hours || 0,
-      status: record.status || 'present' // Default to 'present' if status not provided
+      status: record.status || 'present', // Default to 'present' if status not provided
+      date: record.date || (record.checkin_time ? record.checkin_time.split('T')[0] : '')
     })) || [];
   } catch (error: any) {
     console.error('Error fetching attendance summary:', error);

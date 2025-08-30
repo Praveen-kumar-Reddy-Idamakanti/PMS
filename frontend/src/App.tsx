@@ -13,6 +13,7 @@ import Calendar from "./pages/Calendar";
 import Tasks from "./pages/Tasks";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AttendancePage } from "./pages/admin/AttendancePage";
+import { AttendanceRecordsPage } from "./pages/admin/AttendanceRecordsPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { RouteTransitionLoader } from "@/components/ui/RouteTransitionLoader";
@@ -90,6 +91,13 @@ const App = () => {
               } />
               
               {/* Admin Routes - Only accessible by super_admin */}
+              <Route path="/admin/attendance/records" element={
+                <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
+                  <MainLayout>
+                    <AttendanceRecordsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
               <Route path="/admin/*" element={
                 <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
                   <MainLayout>

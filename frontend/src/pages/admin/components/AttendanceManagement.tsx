@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { attendanceService } from "@/services/attendance.service";
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, List } from 'lucide-react';
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { LoadingGif } from "@/components/ui/LoadingGif";
 
 export const AttendanceManagement = () => {
+  const navigate = useNavigate();
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedUser, setSelectedUser] = useState<string>('all');
 
@@ -34,7 +36,18 @@ export const AttendanceManagement = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 mb-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">Attendance Management</h2>
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/admin/attendance/records')}
+          className="flex items-center gap-2"
+        >
+          <List className="h-4 w-4" />
+          View Records
+        </Button>
+      </div>
+      <div className="flex items-center space-x-4 mb-4">
         <Popover>
           <PopoverTrigger asChild>
             <Button

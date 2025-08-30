@@ -63,13 +63,8 @@ export interface TodayStatus {
   } | null;
 }
 
-interface DashboardProps {
-  user: User;
-}
-
-const Dashboard: React.FC<DashboardProps> = ({ user: propUser }) => {
-  const { user } = useAuth();
-  const currentUser = propUser || user;
+export default function Dashboard() {
+  const { user: currentUser } = useAuth();
   // Initialize hooks
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -632,6 +627,3 @@ const Dashboard: React.FC<DashboardProps> = ({ user: propUser }) => {
     </div>
   );
 };
-
-// Export as default for App.tsx
-export default Dashboard;
