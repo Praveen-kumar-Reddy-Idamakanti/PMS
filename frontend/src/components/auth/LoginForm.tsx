@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,12 +10,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LogIn, Mail, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const loginSchema = z.object({
-  identifier: z.string().min(1, "Employee ID or email is required"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
+// Dynamic schema based on login type
+const createLoginSchema = (loginType: 'email' | 'employeeId') => 
+  z.object({
+    email: loginType === 'email' 
+      ? z.string().min(1, "Email is required").email("Invalid email address")
+      : z.string().optional(),
+    employeeId: loginType === 'employeeId'
+      ? z.string().min(1, "Employee ID is required")
+      : z.string().optional(),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+  });
 
-type LoginFormData = z.infer<typeof loginSchema>;
+type LoginFormData = z.infer<ReturnType<typeof createLoginSchema>>;
 
 interface LoginFormProps {
   onLogin: (data: LoginFormData) => void;
@@ -24,22 +31,67 @@ interface LoginFormProps {
 
 export function LoginForm({ onLogin, isLoading = false }: LoginFormProps) {
   const [loginType, setLoginType] = useState<'email' | 'employeeId'>('email');
+  
+  // Reset the corresponding field when switching login types
+  const switchLoginType = (type: 'email' | 'employeeId') => {
+    setLoginType(type);
+    // Reset the other field when switching types
+    if (type === 'email') {
+      form.setValue('employeeId', '');
+    } else {
+      form.setValue('email', '');
+    }
+  };
   const { toast } = useToast();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+  const form = useForm<LoginFormData>({
+    resolver: zodResolver(createLoginSchema(loginType)),
+    mode: 'onTouched',
+    reValidateMode: 'onChange',
+    defaultValues: {
+      email: '',
+      employeeId: '',
+      password: ''
+    },
+    criteriaMode: 'firstError',
+    shouldFocusError: true,
   });
 
-  const onSubmit = (data: LoginFormData) => {
-    onLogin(data);
-    toast({
-      title: "Logging in...",
-      description: "Please wait while we verify your credentials.",
+  // Update validation schema when login type changes
+  useEffect(() => {
+    // Clear all errors and reset fields without triggering validation
+    form.clearErrors();
+    form.reset({
+      email: '',
+      employeeId: '',
+      password: form.getValues('password') // Keep the password if it was entered
     });
+    
+    // Update the resolver with the new schema
+    const { resolver } = form.control._options;
+    form.control._options.resolver = zodResolver(createLoginSchema(loginType));
+    
+    // Force re-register fields to apply new validation
+    form.register('email');
+    form.register('employeeId');
+    form.register('password');
+  }, [loginType]);
+
+  const { register, handleSubmit, formState: { errors } } = form;
+
+  const onSubmit = (data: LoginFormData) => {
+    console.log('Form submitted with data:', data);
+    
+    // Ensure we're only sending one identifier
+    const loginData = { ...data };
+    if (loginType === 'email') {
+      delete loginData.employeeId;
+    } else {
+      delete loginData.email;
+    }
+    
+    console.log('Sending login data:', loginData);
+    onLogin(loginData);
   };
 
   return (
@@ -65,7 +117,7 @@ export function LoginForm({ onLogin, isLoading = false }: LoginFormProps) {
             variant={loginType === 'email' ? 'default' : 'ghost'}
             size="sm"
             className="flex-1"
-            onClick={() => setLoginType('email')}
+            onClick={() => switchLoginType('email')}
           >
             <Mail className="w-4 h-4 mr-2" />
             Email
@@ -75,42 +127,61 @@ export function LoginForm({ onLogin, isLoading = false }: LoginFormProps) {
             variant={loginType === 'employeeId' ? 'default' : 'ghost'}
             size="sm"
             className="flex-1"
-            onClick={() => setLoginType('employeeId')}
+            onClick={() => switchLoginType('employeeId')}
           >
             <User className="w-4 h-4 mr-2" />
             Employee ID
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit, (errors) => {
+          console.log('Form validation errors:', errors);
+          toast({
+            variant: "destructive",
+            title: "Validation Error",
+            description: "Please check the form for errors.",
+          });
+        })} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="identifier">
               {loginType === 'email' ? 'Email Address' : 'Employee ID'}
             </Label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                {loginType === 'email' ? (
+            {loginType === 'email' ? (
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <User className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="john.doe@company.com"
+                  className="pl-9"
+                  {...register("email")}
+                />
+                {errors.email && (
+                  <Alert variant="destructive" className="mt-1">
+                    <AlertDescription>{errors.email.message}</AlertDescription>
+                  </Alert>
                 )}
               </div>
-              <Input
-                id="identifier"
-                type={loginType === 'email' ? 'email' : 'text'}
-                placeholder={
-                  loginType === 'email' 
-                    ? 'john.doe@company.com' 
-                    : 'EMP001'
-                }
-                className="pl-9"
-                {...register("identifier")}
-              />
-            </div>
-            {errors.identifier && (
-              <Alert variant="destructive">
-                <AlertDescription>{errors.identifier.message}</AlertDescription>
-              </Alert>
+            ) : (
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <Input
+                  id="employeeId"
+                  type="text"
+                  placeholder="EMP001"
+                  className="pl-9"
+                  {...register("employeeId")}
+                />
+                {errors.employeeId && (
+                  <Alert variant="destructive" className="mt-1">
+                    <AlertDescription>{errors.employeeId.message}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
             )}
           </div>
 

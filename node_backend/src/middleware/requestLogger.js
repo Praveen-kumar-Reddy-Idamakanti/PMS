@@ -7,7 +7,8 @@ const EXCLUDED_PATHS = [
   '/favicon.ico',
   '/robots.txt',
   '/sitemap.xml',
-  '/.well-known/'
+  '/.well-known/',
+  '/api/auth/login'  // Skip logging for login route
 ];
 
 // File extensions to exclude from logging

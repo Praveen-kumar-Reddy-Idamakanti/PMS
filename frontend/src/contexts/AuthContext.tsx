@@ -12,7 +12,7 @@ interface AuthUser extends User {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (credentials: { email?: string; employeeId?: string; password: string }) => Promise<boolean>;
   logout: () => void;
   hasRole: (role: UserRole) => boolean;
 }
@@ -203,29 +203,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [checkAuth, navigate, location]);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (credentials: { email?: string; employeeId?: string; password: string }): Promise<boolean> => {
     try {
-      setLoading(true);
-      const user = await authService.login({ email, password });
-      
-      if (!user) {
-        throw new Error('No user data received');
-      }
-      
-      const userData: AuthUser = {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        employeeId: user.employeeId,
-        role: user.role,
-        isAuthenticated: true
-      };
-      
-      // Update the user state
-      setUser(userData);
-      
-      // Store user data in localStorage for persistence
-      localStorage.setItem('user', JSON.stringify(userData));
+      const user = await authService.login(credentials);
+      const authUser = { ...user, isAuthenticated: true };
+      setUser(authUser);
+      localStorage.setItem('user', JSON.stringify(authUser));
       
       toast({
         title: 'Login successful',

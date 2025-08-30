@@ -188,7 +188,7 @@ const ActivityLog = () => {
                   )}
                 </TableCell>
                 <TableCell>
-                  <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
+                  <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300">
                     {activity.user?.role || (activity.user ? 'User' : 'System')}
                   </span>
                 </TableCell>

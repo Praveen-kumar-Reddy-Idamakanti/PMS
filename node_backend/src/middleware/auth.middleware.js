@@ -29,8 +29,8 @@ const authenticate = async (req, res, next) => {
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
         
-        // Get user from the database
-        const [user] = await query('SELECT id, name, email, role, is_active FROM users WHERE id = ?', [decoded.user.id]);
+        // Get user from the database including employee_id
+        const [user] = await query('SELECT id, name, email, employee_id, role, is_active FROM users WHERE id = ?', [decoded.user.id]);
         
         if (!user) {
             logger.warn(`Authentication failed: User not found (ID: ${decoded.user.id})`);
@@ -49,12 +49,14 @@ const authenticate = async (req, res, next) => {
             });
         }
 
-        // Attach user to request object with role
+        // Attach user to request object with role and employeeId
         req.user = {
             id: user.id,
             name: user.name,
             email: user.email,
-            role: user.role
+            employeeId: user.employee_id,
+            role: user.role,
+            is_active: user.is_active
         };
         
         logger.debug(`Authenticated user: ${user.email} (${user.role})`);

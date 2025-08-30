@@ -62,7 +62,8 @@ api.interceptors.response.use(
 );
 
 interface LoginCredentials {
-  email: string;
+  email?: string;
+  employeeId?: string;
   password: string;
 }
 
@@ -91,36 +92,55 @@ export const getErrorMessage = (error: any): string => {
  */
 export const login = async (credentials: LoginCredentials): Promise<User> => {
   try {
-    const response = await api.post<LoginResponse>('/auth/login', credentials);
+    console.log('Login attempt with credentials:', {
+      hasEmail: !!credentials.email,
+      hasEmployeeId: !!credentials.employeeId,
+      hasPassword: !!credentials.password
+    });
     
-    if (response.data.success && response.data.token && response.data.user) {
-      const { token, user } = response.data;
-      
-      // Ensure the user object has all required fields
-      const userData: User = {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        employeeId: user.employeeId,
-        role: user.role, // Default to EMPLOYEE if role is not provided
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
-      };
-      
-      // Store the token for future requests
-      localStorage.setItem('token', token);
-      
-      // Store complete user data
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      return userData;
-    } else {
+    // Determine the login type and prepare the request body
+    const requestBody = credentials.employeeId 
+      ? { employeeId: credentials.employeeId, password: credentials.password }
+      : { email: credentials.email, password: credentials.password };
+    
+    console.log('Sending login request with body:', requestBody);
+    const response = await api.post<LoginResponse>('/auth/login', requestBody);
+    console.log('Login response:', response.data);
+    
+    if (!response.data.success || !response.data.token) {
       throw new Error(response.data.message || 'Login failed');
     }
-  } catch (error) {
+    
+    // Store the token in localStorage
+    localStorage.setItem('token', response.data.token);
+    
+    // Store user data in localStorage
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    
+    return response.data.user;
+  } catch (error: any) {
     console.error('Login error:', error);
-    throw new Error(getErrorMessage(error));
+    
+    // Handle different error types
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      const { status, data } = error.response;
+      
+      if (status === 401) {
+        throw new Error(data?.message || 'Invalid credentials. Please try again.');
+      }
+      
+      throw new Error(data?.message || 'Login failed. Please try again.');
+    } else if (error.request) {
+      // The request was made but no response was received
+      throw new Error('No response from server. Please check your connection.');
+    } else {
+      // Something happened in setting up the request
+      throw new Error(getErrorMessage(error));
+    }
   }
 };
 

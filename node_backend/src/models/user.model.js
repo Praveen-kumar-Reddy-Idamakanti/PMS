@@ -31,7 +31,23 @@ class User {
     static findByEmail(email) {
         const db = getDB();
         return new Promise((resolve, reject) => {
-            db.get('SELECT id, name, email, password, role FROM users WHERE email = ?', [email], (err, row) => {
+            db.get('SELECT id, name, email, password, role, employee_id FROM users WHERE email = ?', [email], (err, row) => {
+                if (err) {
+                    return reject(err);
+                }
+                // Ensure role has a default value if not set
+                if (row) {
+                    row.role = row.role || 'user';
+                }
+                resolve(row);
+            });
+        });
+    }
+
+    static findByEmployeeId(employeeId) {
+        const db = getDB();
+        return new Promise((resolve, reject) => {
+            db.get('SELECT id, name, email, password, role, employee_id FROM users WHERE employee_id = ?', [employeeId], (err, row) => {
                 if (err) {
                     return reject(err);
                 }
@@ -81,6 +97,7 @@ module.exports = {
      * @returns {Promise<Object|null>} User object if found, null otherwise
      */
     findByEmail: User.findByEmail,
+    findByEmployeeId: User.findByEmployeeId,
     
     /**
      * Find user by ID

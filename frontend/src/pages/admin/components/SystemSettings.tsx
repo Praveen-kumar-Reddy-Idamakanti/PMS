@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,9 @@ export const SystemSettings = () => {
     }
   });
 
+  const [locationCheckIn, setLocationCheckIn] = useState(settings?.location_check_in ?? true);
+  const [photoCheckIn, setPhotoCheckIn] = useState(settings?.photo_check_in ?? false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
@@ -34,8 +38,8 @@ export const SystemSettings = () => {
       company_name: formData.get('companyName') as string,
       timezone: formData.get('timezone') as string,
       location: formData.get('location') as string,
-      location_check_in: formData.get('locationCheckIn') === 'on',
-      photo_check_in: formData.get('photoCheckIn') === 'on',
+      location_check_in: locationCheckIn,
+      photo_check_in: photoCheckIn,
     };
     console.log('Submitting settings:', updatedSettings);
     updateSettings.mutate(updatedSettings);
@@ -107,7 +111,8 @@ export const SystemSettings = () => {
               <Switch
                 id="locationCheckIn"
                 name="locationCheckIn"
-                defaultChecked={settings.location_check_in !== false}
+                checked={locationCheckIn}
+                onCheckedChange={setLocationCheckIn}
               />
             </div>
             <p className="text-sm text-muted-foreground">
@@ -121,7 +126,8 @@ export const SystemSettings = () => {
               <Switch
                 id="photoCheckIn"
                 name="photoCheckIn"
-                defaultChecked={settings.photo_check_in || false}
+                checked={photoCheckIn}
+                onCheckedChange={setPhotoCheckIn}
               />
             </div>
             <p className="text-sm text-muted-foreground">

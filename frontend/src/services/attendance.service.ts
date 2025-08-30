@@ -51,8 +51,9 @@ const checkIn = async (data: {
   location?: {
     latitude: number;
     longitude: number;
-    address: string;
+    address?: string;
   };
+  photo?: string; // Base64 encoded image
 }) => {
   try {
     // Ensure we send the current date in ISO format with timezone offset

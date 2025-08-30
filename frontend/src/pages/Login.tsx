@@ -6,7 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LoadingGif } from '@/components/ui/LoadingGif';
 
 interface LoginCredentials {
-  identifier: string;
+  email?: string;
+  employeeId?: string;
   password: string;
 }
 
@@ -49,38 +50,45 @@ export default function Login() {
     }
   }, [locationState, toast]);
 
-  const handleLogin = async (credentials: { identifier: string; password: string }) => {
+  const handleLogin = async (credentials: { email?: string; employeeId?: string; password: string }) => {
+    console.log('Login form submitted with credentials:', credentials);
     if (isLoading) return;
     
     setIsLoading(true);
     try {
-      const success = await login(credentials.identifier, credentials.password);
-      if (!success) {
-        throw new Error('Login failed. Please check your email and password.');
-      }
+      console.log('Calling login function with credentials...');
+      const success = await login(credentials);
+      console.log('Login result:', { success, user });
       
-      // Clear any error state from location
-      if (locationState?.error) {
-        window.history.replaceState({}, document.title);
-      }
-      
-      // Navigate to dashboard or previous location
-      const redirectPath = locationState?.from?.pathname || '/dashboard';
-      if (location.pathname !== redirectPath) {
+      if (success) {
+        // Navigate after successful login
+        const redirectPath = locationState?.from?.pathname || '/dashboard';
+        console.log('Login successful, redirecting to:', redirectPath);
         navigate(redirectPath, { replace: true });
-      }
-      
-    } catch (error) {
-      console.error('Login error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      
-      if (!errorMessage.includes('Network Error')) {
+        
         toast({
-          title: 'Login Failed',
-          description: errorMessage,
-          variant: 'destructive',
+          title: 'Login successful',
+          description: `Welcome back!`,
         });
+      } else {
+        console.log('Login failed: Invalid credentials');
       }
+    } catch (error) {
+      console.error('Login error details:', error);
+      console.error('Login error:', error);
+      let errorMessage = 'Invalid credentials';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      toast({
+        title: 'Login failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +108,7 @@ export default function Login() {
         
         {isLoading || authLoading ? (
           <div className="min-h-screen flex items-center justify-center">
-            <LoadingGif text="Authenticating..." className="min-h-screen" />
+            <LoadingGif text="Authenticating..." />
           </div>
         ) : (
           <LoginForm onLogin={handleLogin} isLoading={isLoading} />

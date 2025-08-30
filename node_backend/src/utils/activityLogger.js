@@ -9,19 +9,43 @@ const ActivityLog = require('../models/activityLog.model');
  * @param {Object} req - Express request object (optional)
  * @returns {Promise<Object>} The created activity log
  */
-const logActivity = async (userId, activityType, user = null, details = {}, req = null) => {
+/**
+ * Logs an activity
+ * @param {number} userId - ID of the user performing the action
+ * @param {string} activityType - Type of activity (from ACTIVITY_TYPES)
+ * @param {Object} details - Additional details about the activity
+ * @param {Object} req - Express request object (optional)
+ * @returns {Promise<Object>} The created activity log
+ */
+const logActivity = async (userId, activityType, details = {}, req = null) => {
   try {
-    const ipAddress = req?.ip || null;
+    if (!userId) {
+      console.warn('Cannot log activity: User ID is required');
+      return null;
+    }
+
+    const ipAddress = req?.ip || req?.connection?.remoteAddress || null;
     const userAgent = req?.get('User-Agent') || null;
+    
+    console.log('Logging activity:', {
+      userId,
+      activityType,
+      ipAddress,
+      userAgent,
+      details
+    });
     
     const activityLog = await ActivityLog.logActivity({
       userId,
       activityType,
-      user,
       details,
       ipAddress,
       userAgent
     });
+
+    if (!activityLog) {
+      console.warn('Failed to log activity: No activity log was created');
+    }
 
     return activityLog;
   } catch (error) {
