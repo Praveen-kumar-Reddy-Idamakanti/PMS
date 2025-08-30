@@ -43,12 +43,16 @@ const register = async (req, res) => {
             details: { role, email }
         }, req);
 
-        // Create JWT payload
+        // Log user data to verify role is present
+        console.log('Register - User data from DB:', { id: user.id, email: user.email, role: user.role });
+
+        // Create JWT payload with role
         const payload = { 
             user: { 
                 id: user.id,
                 name: user.name,
-                email: user.email
+                email: user.email,
+                role: user.role || 'user' // Ensure role is included with a default
             } 
         };
 
@@ -70,7 +74,8 @@ const register = async (req, res) => {
                     user: {
                         id: user.id,
                         name: user.name,
-                        email: user.email
+                        email: user.email,
+                        role: user.role || 'user'  // Include role in the response
                     }
                 });
             }
@@ -121,12 +126,16 @@ const login = async (req, res) => {
             });
         }
 
-        // Create JWT payload
+        // Log user data to verify role is present
+        console.log('User data from DB:', { id: user.id, email: user.email, role: user.role });
+
+        // Create JWT payload with role
         const payload = { 
             user: { 
                 id: user.id,
                 name: user.name,
-                email: user.email
+                email: user.email,
+                role: user.role || 'user' // Ensure role is included with a default
             } 
         };
 
@@ -141,6 +150,9 @@ const login = async (req, res) => {
                     return sendResponse(res, 500, false, 'Server error during token generation');
                 }
                 
+                // Log the token payload for debugging
+                console.log('Token payload:', payload);
+                
                 // Send token and user data directly in the response
                 res.status(200).json({
                     success: true,
@@ -150,6 +162,7 @@ const login = async (req, res) => {
                         id: user.id,
                         name: user.name,
                         email: user.email,
+                        role: user.role || 'user',
                         role: user.role || 'user'  // Ensure role has a default value
                     }
                 });

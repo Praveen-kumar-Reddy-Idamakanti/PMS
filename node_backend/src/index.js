@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const adminRoutes = require('./routes/admin.routes');
 const activityLogsRoutes = require('./routes/activityLogs.routes');
+const adminSettingsRoutes = require('./routes/adminSettings.routes');
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/activity-logs', activityLogsRoutes);
+app.use('/api/admin/settings', adminSettingsRoutes);
 
 // 404 handler
 app.use((req, res) => {

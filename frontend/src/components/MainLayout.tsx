@@ -4,6 +4,7 @@ import { UserMenu } from '@/components/UserMenu';
 import { cn } from '@/lib/utils';
 import { UserRole } from '@/types/user';
 import { useEffect } from 'react';
+import { useAdminSettings } from '@/hooks/useAdminSettings';
 
 interface MainLayoutProps {
   children?: React.ReactNode;
@@ -24,6 +25,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const location = useLocation();
   const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const { settings: adminSettings, loading: settingsLoading } = useAdminSettings();
 
 
   return (
@@ -31,8 +33,10 @@ export function MainLayout({ children }: MainLayoutProps) {
       <header className="border-b">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center">
-            <img className="w-8 h-8 mr-2" src="/logo.png" alt="Thirdvizion" />
-            <h1 className="text-xl font-bold">Thirdvizion</h1>
+            <img className="w-8 h-8 mr-2" src="/logo.png" alt={adminSettings?.company_name || 'Company Logo'} />
+            <h1 className="text-xl font-bold">
+              {settingsLoading ? 'Loading...' : adminSettings?.company_name || 'Company Name'}
+            </h1>
             <nav className="ml-6 flex items-center space-x-4">
               <Link
                 to="/dashboard"
