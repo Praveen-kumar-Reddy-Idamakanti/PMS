@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { attendanceService } from "@/services/attendance.service";
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, ArrowLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { LoadingGif } from "@/components/ui/LoadingGif";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface AttendanceApiResponse {
@@ -37,6 +38,8 @@ interface AttendanceRecord {
 }
 
 export const AttendanceRecordsPage = () => {
+  const navigate = useNavigate();
+  
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
     const date = new Date();
     date.setDate(1); // First day of current month
@@ -93,7 +96,16 @@ export const AttendanceRecordsPage = () => {
   return (
     <div className="space-y-4 p-6">
       <div className="flex justify-between items-center">
+        <Button
+          variant="ghost"
+          className="gap-2"
+          onClick={() => navigate('/admin/attendance')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Attendance
+        </Button>
         <h1 className="text-2xl font-bold">Attendance Records</h1>
+        <div className="w-[136px]"></div> {/* Spacer for alignment */}
       </div>
 
       <div className="flex items-center space-x-4 mb-6">
