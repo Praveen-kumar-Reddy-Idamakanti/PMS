@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { activityService, Activity, ActivityUser, PaginatedResponse } from "../../../services/activity.service";
+import { userService } from "../../../services/user.service";
 import { LoadingGif } from "@/components/ui/LoadingGif";
 import { formatDistanceToNow, format } from 'date-fns';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { User } from '@/types/user';
 
 // Temporary date input component since date-picker is not available
 const DateInput = ({
@@ -44,7 +46,7 @@ const ActivityLog = () => {
     sortOrder: 'desc' as const,
   });
 
-  const { data, isLoading, error } = useQuery<PaginatedResponse<Activity>>({
+  const { data: activitiesData, isLoading, error } = useQuery<PaginatedResponse<Activity>>({
     queryKey: ['activities', { ...filters, page }],
     queryFn: () => activityService.getActivities({
       ...filters,
@@ -53,12 +55,35 @@ const ActivityLog = () => {
     }),
   });
 
+  // Fetch all users once when the component mounts
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery({
+    queryKey: ['allUsers'],
+    queryFn: userService.getAllUsers,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Create a map of user IDs to user objects for quick lookup
+  const userMap = users.reduce<Record<string, User>>((acc, user) => {
+    if (user?.id) {
+      acc[user.id.toString()] = user;
+    }
+    return acc;
+  }, {});
+
+  // Merge activity data with user details
+  const activities = activitiesData?.data.map(activity => ({
+    ...activity,
+    user: activity.userId ? userMap[activity.userId.toString()] || null : null
+  })) || [];
+
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPage(1); // Reset to first page when filters change
   };
 
-  if (isLoading && !data) return <LoadingGif text="Loading activities..." />;
+  if ((isLoading || isLoadingUsers || !activitiesData) && activities.length === 0) {
+    return <LoadingGif text="Loading activities..." />;
+  }
 
   if (error) {
     return (
@@ -68,8 +93,7 @@ const ActivityLog = () => {
     );
   }
 
-  const activities = data?.data || [];
-  const pagination = data?.pagination || { page: 1, limit: ITEMS_PER_PAGE, total: 0, totalPages: 1 };
+  const pagination = activitiesData?.pagination || { page: 1, limit: ITEMS_PER_PAGE, total: 0, totalPages: 1 };
   const totalItems = pagination.total || 0;
   const totalPages = pagination.totalPages || 1;
 
@@ -142,7 +166,7 @@ const ActivityLog = () => {
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
-              <TableHead>Name</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Time</TableHead>
               <TableHead>IP Address</TableHead>
@@ -152,11 +176,21 @@ const ActivityLog = () => {
             {activities.map((activity) => (
               <TableRow key={activity.id}>
                 <TableCell className="font-medium">
-                  {activity.user?.email || activity.userEmail || 'System'}
+                  {activity.user ? (
+                    <div className="flex flex-col">
+                      <span>{activity.user.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {activity.user.email || 'No email'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span>System</span>
+                  )}
                 </TableCell>
                 <TableCell>
-                  {activity.user?.name || activity.userName || 
-                   (activity.details?.user?.name) || 'System'}
+                  <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
+                    {activity.user?.role || (activity.user ? 'User' : 'System')}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">

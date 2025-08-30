@@ -25,48 +25,152 @@ const colors = {
   bgBlue: '\x1b[44m',
   bgMagenta: '\x1b[45m',
   bgCyan: '\x1b[46m',
-  bgWhite: '\x1b[47m'
+  bgWhite: '\x1b[47m',
+  
+  // Custom log levels
+  levels: {
+    error: '\x1b[31m',
+    warn: '\x1b[33m',
+    info: '\x1b[36m',
+    http: '\x1b[35m',
+    debug: '\x1b[37m',
+    success: '\x1b[32m',
+    verbose: '\x1b[34m'
+  }
 };
 
 const getTimestamp = () => {
   return new Date().toISOString();
 };
 
+const stringify = (obj) => {
+  if (typeof obj === 'string') return obj;
+  if (obj instanceof Error) return obj.stack || obj.message;
+  if (obj === undefined || obj === null) return '';
+  try {
+    return JSON.stringify(obj, (key, value) => {
+      // Handle circular references
+      if (typeof value === 'object' && value !== null) {
+        // Mask sensitive data
+        if (['password', 'token', 'authorization', 'cookie'].includes(key.toLowerCase())) {
+          return '***';
+        }
+        // Handle large objects
+        if (key === 'data' && value && value.length > 1000) {
+          return `[Data (${value.length} bytes)]`;
+        }
+      }
+      return value;
+    }, 2);
+  } catch (e) {
+    return '[Circular or non-serializable data]';
+  }
+};
+
+const formatMessage = (level, message, ...args) => {
+  const timestamp = getTimestamp();
+  const levelColor = colors.levels[level] || '';
+  const levelLabel = level.toUpperCase().padEnd(7);
+  
+  const formattedArgs = args.map(arg => 
+    typeof arg === 'object' ? stringify(arg) : arg
+  ).join(' ');
+  
+  const formattedMessage = typeof message === 'string' ? message : stringify(message);
+  
+  return `${colors.dim}[${timestamp}] ${levelColor}${levelLabel}${colors.reset} ${formattedMessage} ${formattedArgs}`;
+};
+
 const logger = {
+  // Basic logging
   log: (message, ...args) => {
-    console.log(`${colors.cyan}[${getTimestamp()}]${colors.reset}`, message, ...args);
+    console.log(formatMessage('info', message, ...args));
   },
   
+  // Info level
   info: (message, ...args) => {
-    console.info(`${colors.cyan}[${getTimestamp()}] ${colors.green}[INFO]${colors.reset}`, message, ...args);
+    console.info(formatMessage('info', message, ...args));
   },
   
+  // Success level
   success: (message, ...args) => {
-    console.log(`${colors.cyan}[${getTimestamp()}] ${colors.green}${colors.bright}[SUCCESS]${colors.reset}`, message, ...args);
+    console.log(formatMessage('success', message, ...args));
   },
   
+  // Warning level
   warn: (message, ...args) => {
-    console.warn(`${colors.cyan}[${getTimestamp()}] ${colors.yellow}[WARN]${colors.reset}`, message, ...args);
+    console.warn(formatMessage('warn', message, ...args));
   },
   
+  // Error level
   error: (message, ...args) => {
-    console.error(`${colors.cyan}[${getTimestamp()}] ${colors.red}${colors.bright}[ERROR]${colors.reset}`, message, ...args);
+    console.error(formatMessage('error', message, ...args));
   },
   
+  // Debug level (only in development)
   debug: (message, ...args) => {
-    if (process.env.NODE_ENV === 'development' || process.env.DEBUG) {
-      console.debug(`${colors.cyan}[${getTimestamp()}] ${colors.blue}[DEBUG]${colors.reset}`, message, ...args);
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(formatMessage('debug', message, ...args));
     }
   },
   
+  // HTTP request/response logging
   http: (message, ...args) => {
-    console.log(`${colors.cyan}[${getTimestamp()}] ${colors.magenta}[HTTP]${colors.reset}`, message, ...args);
+    console.log(formatMessage('http', message, ...args));
   },
   
   // For morgan HTTP request logging
   stream: {
     write: (message) => {
-      logger.http(message.trim());
+      const statusCode = message.match(/\s(\d{3})\s/)?.[1];
+      const method = message.match(/^\S+/)?.[0];
+      const url = message.match(/\s(\/[^\s?]+)/)?.[1] || '/';
+      const responseTime = message.match(/(\d+)ms/)?.[1] || '0';
+      
+      if (statusCode >= 500) {
+        logger.error(`${method} ${url} ${statusCode} - ${responseTime}ms`);
+      } else if (statusCode >= 400) {
+        logger.warn(`${method} ${url} ${statusCode} - ${responseTime}ms`);
+      } else {
+        logger.http(`${method} ${url} ${statusCode} - ${responseTime}ms`);
+      }
+    }
+  },
+  
+  // Request logging helper
+  request: (req) => {
+    const { method, originalUrl, ip, headers, query, params, body } = req;
+    logger.http('Incoming Request', {
+      method,
+      url: originalUrl,
+      ip,
+      headers: {
+        'user-agent': headers['user-agent'],
+        'content-type': headers['content-type'],
+        authorization: headers.authorization ? '***' : undefined
+      },
+      query,
+      params,
+      body: body && Object.keys(body).length ? body : undefined
+    });
+  },
+  
+  // Response logging helper
+  response: (req, res, responseBody) => {
+    const { method, originalUrl } = req;
+    const { statusCode } = res;
+    
+    const logData = {
+      method,
+      url: originalUrl,
+      status: statusCode,
+      response: responseBody
+    };
+    
+    if (statusCode >= 400) {
+      logger.error('API Response', logData);
+    } else {
+      logger.http('API Response', logData);
     }
   }
 };

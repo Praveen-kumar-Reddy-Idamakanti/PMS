@@ -3,20 +3,40 @@ const express = require('express');
 const cors = require('cors');
 const { connectDB, getDB } = require('./config/db');
 const { initDatabase } = require('./config/initDb');
+const logger = require('./utils/logger');
+const requestLogger = require('./middleware/requestLogger');
+
+// Import routes
 const authRoutes = require('./routes/auth.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const adminRoutes = require('./routes/admin.routes');
+const activityLogsRoutes = require('./routes/activityLogs.routes');
 
 const app = express();
 
 // CORS configuration
 const corsOptions = {
-  origin: ['http://localhost:8080', 'http://127.0.0.1:8080'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: [
+    'http://localhost:8080', 
+    'http://127.0.0.1:8080',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
+  exposedHeaders: ['x-auth-token'],
   credentials: true,
   optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 };
+
+// Log CORS errors
+app.use((err, req, res, next) => {
+  if (err) {
+    logger.error('CORS Error:', err);
+    return res.status(500).json({ error: 'CORS Error', details: err.message });
+  }
+  next();
+});
 
 // Enable CORS with options
 app.use(cors(corsOptions));
@@ -25,22 +45,16 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Body parser middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// // Debugging middleware - log all requests
-// app.use((req, res, next) => {
-//   const timestamp = new Date().toISOString();
-//   console.log(`[${timestamp}] ${req.method} ${req.originalUrl}`);
-//   console.log('Headers:', JSON.stringify(req.headers, null, 2));
-//   if (Object.keys(req.body).length > 0) {
-//     console.log('Body:', JSON.stringify(req.body, null, 2));
-//   }
-//   if (Object.keys(req.query).length > 0) {
-//     console.log('Query:', JSON.stringify(req.query, null, 2));
-//   }
-//   next();
-// });
+// Request logging middleware (must be after body parser)
+app.use(requestLogger);
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Root route
 app.get('/', (req, res) => {
@@ -51,20 +65,42 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/activity-logs', activityLogsRoutes);
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
+  res.status(404).json({ 
+    error: 'Not Found',
+    path: req.path,
+    method: req.method 
+  });
 });
 
-// Error handling middleware
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error('Server error:', err.stack);
-  res.status(500).json({
-    success: false,
-    message: 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err.message : {}
+  const statusCode = err.statusCode || 500;
+  
+  logger.error('Unhandled Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'production' ? '🔒' : err.stack,
+    path: req.path,
+    method: req.method,
+    body: req.body,
+    params: req.params,
+    query: req.query,
+    user: req.user?.id || 'anonymous'
   });
+
+  // Don't leak error details in production
+  const errorResponse = {
+    error: statusCode >= 500 ? 'Internal Server Error' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { 
+      stack: err.stack,
+      details: err.details 
+    })
+  };
+
+  res.status(statusCode).json(errorResponse);
 });
 
 const PORT = process.env.PORT || 5001;

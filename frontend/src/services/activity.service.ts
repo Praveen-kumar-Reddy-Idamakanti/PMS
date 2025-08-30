@@ -4,20 +4,22 @@ export interface ActivityUser {
   id: string;
   name: string;
   email: string;
+  role: string;
   employeeId?: string;
 }
 
 export interface Activity {
   id: string;
   userId: string;
-  user?: ActivityUser;
-  userEmail?: string;
-  userName?: string;
+  user: ActivityUser | null;
   activityType: string;
   details: Record<string, any>;
   ipAddress: string | null;
   userAgent: string | null;
   timestamp: string;
+  // Legacy fields for backward compatibility
+  userEmail?: string;
+  userName?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -44,7 +46,9 @@ interface ActivityFilters {
 
 const getActivities = async (filters: ActivityFilters = {}): Promise<PaginatedResponse<Activity>> => {
   try {
+    console.log('Fetching activities with filters:', filters);
     const response = await api.get<PaginatedResponse<Activity>>('/admin/activity-logs', { params: filters });
+    console.log('Raw activities response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Failed to fetch activities:', error);

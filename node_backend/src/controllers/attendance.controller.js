@@ -1,5 +1,6 @@
 const Attendance = require('../models/attendance.model');
 const { validationResult } = require('express-validator');
+const { logActivity } = require('../utils/activityLogger');
 
 /**
  * Debug function for attendance controller
@@ -54,7 +55,7 @@ const checkIn = async (req, res) => {
         }
 
         // Create check-in record
-        const checkIn = await Attendance.create({
+        const checkInRecord = await Attendance.create({
             userId,
             type: 'checkin',
             notes,
@@ -62,10 +63,17 @@ const checkIn = async (req, res) => {
             photo
         });
 
+        // Log check-in activity
+        await logActivity(userId, 'USER_CHECKIN', {
+            action: 'checked_in',
+            location: location || 'Not specified',
+            recordId: checkInRecord.id
+        }, req);
+
         res.status(201).json({
             success: true,
             message: 'Checked in successfully',
-            data: checkIn
+            data: checkInRecord
         });
 
     } catch (error) {
@@ -143,6 +151,13 @@ const checkOut = async (req, res) => {
             location, 
             photo 
         });
+
+        // Log check-out activity
+        await logActivity(userId, 'USER_CHECKOUT', {
+            action: 'checked_out',
+            location: location || 'Not specified',
+            recordId: checkOut.id
+        }, req);
         
         // Calculate hours worked for today (in user's timezone)
         const { totalHours } = await Attendance.calculateWorkedHours(userId, userToday);

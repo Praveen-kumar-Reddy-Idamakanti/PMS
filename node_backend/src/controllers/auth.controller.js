@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
+const { logActivity } = require('../utils/activityLogger');
 
 // Helper function to send consistent responses
 const sendResponse = (res, status, success, message, data = null) => {
@@ -35,6 +36,12 @@ const register = async (req, res) => {
                 message: 'Failed to create user'
             });
         }
+
+        // Log user registration
+        await logActivity(user.id, 'USER_CREATE', {
+            action: 'user_registered',
+            details: { role, email }
+        }, req);
 
         // Create JWT payload
         const payload = { 
@@ -197,15 +204,24 @@ const getCurrentUser = async (req, res) => {
  * @route POST /api/auth/logout
  * @access Private
  */
-const logout = (req, res) => {
-    // Since JWT is stateless, the client should just remove the token
-    // Clear the token cookie
-    res.clearCookie('token');
+const logout = async (req, res) => {
+    try {
+        // Log user logout
+        if (req.user && req.user.id) {
+            await logActivity(req.user.id, 'USER_LOGOUT', {
+                action: 'user_logout',
+                ip: req.ip
+            }, req);
+        }
+    } catch (error) {
+        console.error('Error logging logout activity:', error);
+        // Don't fail the logout if logging fails
+    }
     
-    // Return success response
-    return res.status(200).json({ 
-        success: true, 
-        message: 'Logged out successfully' 
+    // Clear the client-side token
+    res.status(200).json({
+        success: true,
+        message: 'Logged out successfully'
     });
 };
 
