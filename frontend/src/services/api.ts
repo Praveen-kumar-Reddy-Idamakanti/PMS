@@ -13,22 +13,39 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    console.log('API Request:', {
+      url: config.url,
+      method: config.method,
+      hasToken: !!token,
+      headers: config.headers
+    });
+    
     if (token) {
-      // For non-OPTIONS requests, set the authorization header
-      if (config.method?.toLowerCase() !== 'options') {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
+      // Use standard Authorization header with Bearer token
+      config.headers['Authorization'] = `Bearer ${token}`;
+      console.log('Added Authorization header to request');
+    } else {
+      console.warn('No token found in localStorage');
     }
+    
     return config;
   },
   (error) => {
+    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Add a response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('API Response:', {
+      url: response.config.url,
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
   (error) => {
     if (error.response) {
       // Handle specific status codes

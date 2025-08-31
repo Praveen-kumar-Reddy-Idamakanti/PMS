@@ -10,6 +10,7 @@ router.post('/login', authController.login);
 
 // Protected routes
 router.get('/user', authMiddleware.authenticate, authController.getCurrentUser);
+router.get('/me', authMiddleware.authenticate, authController.getCurrentUser); // Alias for /user
 router.post('/logout', authMiddleware.authenticate, authController.logout);
 
 // Health check endpoint

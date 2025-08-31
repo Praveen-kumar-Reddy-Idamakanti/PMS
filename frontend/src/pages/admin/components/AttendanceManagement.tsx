@@ -42,7 +42,7 @@ export const AttendanceManagement = () => {
         <Button 
           variant="outline" 
           onClick={() => navigate('/admin/attendance/records')}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 border-orange-500 text-orange-500 hover:bg-orange-50 hover:text-orange-600 "
         >
           <List className="h-4 w-4" />
           View Records

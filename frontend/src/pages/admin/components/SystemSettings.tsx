@@ -11,20 +11,32 @@ import { adminSettingsService, AdminSettings } from "@/services/adminSettings.se
 export const SystemSettings = () => {
   const queryClient = useQueryClient();
 
-  const { data: settings, isLoading } = useQuery<AdminSettings>({
+  const { data: settings, isLoading, error } = useQuery<AdminSettings | null>({
     queryKey: ['admin-settings'],
     queryFn: adminSettingsService.getSettings,
+    // Don't retry on 403 Forbidden errors
+    retry: (failureCount, error: any) => {
+      return error?.response?.status !== 403 && failureCount < 3;
+    },
   });
 
   const updateSettings = useMutation({
-    mutationFn: (updatedSettings: Partial<AdminSettings>) => 
-      adminSettingsService.updateSettings(updatedSettings),
+    mutationFn: async (updatedSettings: Partial<AdminSettings>) => {
+      try {
+        return await adminSettingsService.updateSettings(updatedSettings);
+      } catch (error) {
+        // The error is already handled in the service, just rethrow it
+        throw error;
+      }
+    },
     onSuccess: () => {
+      // Invalidate and refetch the settings
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
       toast.success('Settings updated successfully');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update settings: ${error.message}`);
+      // Show error toast with the error message
+      toast.error(error.message || 'Failed to update settings');
     }
   });
 
@@ -45,7 +57,23 @@ export const SystemSettings = () => {
     updateSettings.mutate(updatedSettings);
   };
 
-  if (isLoading || !settings) return <LoadingGif text="Loading system settings..." />;
+  if (isLoading) return <LoadingGif text="Loading system settings..." />;
+  
+  if (error) {
+    return (
+      <div className="p-4 text-center text-red-500">
+        Error loading settings: {error instanceof Error ? error.message : 'Unknown error'}
+      </div>
+    );
+  }
+  
+  if (!settings) {
+    return (
+      <div className="p-4 text-center text-yellow-600">
+        No settings found. Please contact an administrator to configure system settings.
+      </div>
+    );
+  }
 
   // Timezone options
   const timezones = [

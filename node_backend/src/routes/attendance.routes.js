@@ -16,7 +16,8 @@ const {
     checkOut, 
     getAttendanceRecords, 
     getTodaysStatus, 
-    getAttendanceSummary 
+    getAttendanceSummary,
+    getMyAttendance 
 } = attendanceController;
 
 // Debug middleware for attendance routes
@@ -235,6 +236,50 @@ router.get('/today', authenticate, getTodaysStatus);
  *       500:
  *         description: Server error
  */
-router.get('/summary', authenticate, ...summaryValidation, getAttendanceSummary);
+router.get('/summary', authenticate, summaryValidation, getAttendanceSummary);
+
+/**
+ * @swagger
+ * /api/attendance/me:
+ *   get:
+ *     summary: Get current user's attendance records
+ *     tags: [Attendance]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for filtering records (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for filtering records (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: List of attendance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AttendanceRecord'
+ *       401:
+ *         description: Unauthorized
+ *       400:
+ *         description: Invalid date format
+ *       500:
+ *         description: Server error
+ */
+router.get('/me', authenticate, getMyAttendance);
 
 module.exports = router;

@@ -384,11 +384,114 @@ const getAttendanceSummary = async (req, res) => {
     }
 };
 
+/**
+ * Get attendance records for the current user with date range filter
+ * @route GET /api/attendance/me
+ * @access Private
+ */
+const getMyAttendance = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const userId = req.user.id;
+        
+        console.log(`getMyAttendance called for user ${userId}, startDate: ${startDate}, endDate: ${endDate}`);
+
+        // Validate date range (if provided)
+        if ((startDate && !Date.parse(startDate)) || (endDate && !Date.parse(endDate))) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid date format. Please use YYYY-MM-DD.'
+            });
+        }
+
+        // Fetch attendance records using the correct model method
+        const records = await Attendance.findByUserId(userId, {
+            startDate,
+            endDate,
+            limit: 1000, // Set a higher limit to get all records
+            offset: 0
+        });
+
+        // Group records by date and calculate hours
+        const dailyRecords = {};
+        
+        records.forEach(record => {
+            const date = new Date(record.timestamp).toISOString().split('T')[0];
+            
+            if (!dailyRecords[date]) {
+                dailyRecords[date] = {
+                    date,
+                    checkins: [],
+                    checkouts: [],
+                    notes: [],
+                    locations: []
+                };
+            }
+            
+            if (record.type === 'checkin') {
+                dailyRecords[date].checkins.push(record.timestamp);
+                if (record.notes) dailyRecords[date].notes.push(record.notes);
+                if (record.location) dailyRecords[date].locations.push(record.location);
+            } else if (record.type === 'checkout') {
+                dailyRecords[date].checkouts.push(record.timestamp);
+                if (record.notes) dailyRecords[date].notes.push(record.notes);
+                if (record.location) dailyRecords[date].locations.push(record.location);
+            }
+        });
+
+        // Format response with calculated hours
+        const formattedRecords = Object.values(dailyRecords).map(dayRecord => {
+            // Sort check-ins and check-outs
+            const checkins = dayRecord.checkins.sort();
+            const checkouts = dayRecord.checkouts.sort();
+            
+            // Calculate total hours for the day
+            let totalHours = 0;
+            const minLength = Math.min(checkins.length, checkouts.length);
+            
+            for (let i = 0; i < minLength; i++) {
+                const checkinTime = new Date(checkins[i]);
+                const checkoutTime = new Date(checkouts[i]);
+                const hours = (checkoutTime - checkinTime) / (1000 * 60 * 60);
+                totalHours += hours;
+            }
+            
+            return {
+                id: `${userId}_${dayRecord.date}`,
+                date: dayRecord.date,
+                checkIn: checkins[0] || null,
+                checkOut: checkouts[checkouts.length - 1] || null,
+                totalHours: Math.round(totalHours * 100) / 100, // Round to 2 decimal places
+                status: checkins.length > 0 ? 'present' : 'absent',
+                notes: dayRecord.notes.join('; ') || null,
+                location: dayRecord.locations[0] || null
+            };
+        }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date descending
+
+        console.log(`getMyAttendance returning ${formattedRecords.length} records with total hours:`, 
+            formattedRecords.map(r => ({ date: r.date, hours: r.totalHours })));
+
+        res.status(200).json({
+            success: true,
+            data: formattedRecords
+        });
+
+    } catch (error) {
+        console.error('Error in getMyAttendance:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching attendance records',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 // Export all controller functions at the end of the file
 module.exports = {
     checkIn,
     checkOut,
     getAttendanceRecords,
     getTodaysStatus,
-    getAttendanceSummary
+    getAttendanceSummary,
+    getMyAttendance
 };

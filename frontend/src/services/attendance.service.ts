@@ -36,7 +36,7 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers['x-auth-token'] = token;
     }
     return config;
   },
@@ -367,15 +367,19 @@ const getAttendanceSummary = async (params: AttendanceSummaryParams): Promise<At
 const getEmployeeAttendance = async (userId: string, params: { startDate?: string; endDate?: string } = {}) => {
   try {
     const { startDate, endDate } = params;
-    const response = await api.get(`/admin/attendance/employee/${userId}`, {
+    const response = await api.get(`/attendance/me`, {
       params: {
         startDate,
         endDate,
       },
     });
-    return response.data?.data || [];
+    
+    // Ensure the response format matches what the frontend expects
+    const data = response.data?.data || response.data || [];
+    return { data }; // Wrap in data object to match expected format
   } catch (error: any) {
-    throw error.response?.data || { message: 'Error fetching employee attendance' };
+    console.error('Error in getEmployeeAttendance:', error);
+    throw error.response?.data || { message: 'Error fetching attendance records' };
   }
 };
 

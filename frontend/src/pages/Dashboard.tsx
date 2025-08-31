@@ -190,16 +190,27 @@ export default function Dashboard() {
   } = useQuery<WeeklySummary, Error>({
     queryKey: ['weeklySummary'],
     queryFn: async (): Promise<WeeklySummary> => {
+      if (!currentUser?.id) return { totalHours: 0, changeFromLastWeek: 0 };
+      
       try {
-        const response = await attendanceService.getAttendanceSummary({
+        const response = await attendanceService.getEmployeeAttendance(currentUser.id, {
           startDate: format(new Date(new Date().setDate(new Date().getDate() - 7)), 'yyyy-MM-dd'),
           endDate: format(new Date(), 'yyyy-MM-dd')
         });
         
+        console.log('Weekly summary response:', response);
+        
+        // Handle the response structure - response.data contains the array
+        const attendanceRecords = response.data || [];
+        
         // Calculate total hours from attendance records
-        const totalHours = response.reduce((sum, record) => {
-          return sum + (record.totalHours || 0);
+        const totalHours = attendanceRecords.reduce((sum: number, record: any) => {
+          const hours = record.totalHours || 0;
+          console.log(`Record date: ${record.date}, hours: ${hours}`);
+          return sum + hours;
         }, 0);
+        
+        console.log('Calculated total hours:', totalHours);
         
         // For demo purposes, we'll use a fixed change value
         // In a real app, you'd compare with the previous period
@@ -393,7 +404,7 @@ export default function Dashboard() {
   const renderAttendanceStatus = () => (
     <div className="lg:col-span-2">
       {/* Attendance Status */}
-      <Card className="shadow-medium">
+      <Card className="shadow-medium hover:border-orange-500">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Clock className="w-5 h-5 text-primary" />
@@ -471,14 +482,16 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold text-foreground">
-                Welcome back, {currentUser?.name || 'User'}! 👋
+                Welcome back, {currentUser?.name || 'User'}! 
               </h2>
               <Badge variant="outline" className="px-2 py-1 text-xs">
                 {currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1).toLowerCase() : 'User'}
               </Badge>
             </div>
-            <p className="text-muted-foreground mt-1">
-              {format(new Date(), 'EEEE, MMMM do, yyyy')}
+            <p className="mt-1">
+              <span className="text-orange-500">{format(new Date(), 'do ')}</span>
+              <span className="text-foreground">{format(new Date(), ',EEEE, ')}</span>
+              <span className="text-foreground">{format(new Date(), 'MMMM yyyy,')}</span>
             </p>
           </div>
           {(currentUser?.role === 'admin' || currentUser?.role === 'team_leader') && (
@@ -497,7 +510,7 @@ export default function Dashboard() {
           {renderAttendanceStatus()}
 
           {/* Quick Actions */}
-          <Card className="shadow-medium">
+          <Card className="shadow-medium hover:border-orange-500">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Clock className="w-5 h-5 text-primary" />
@@ -532,12 +545,12 @@ export default function Dashboard() {
                   renderCheckInButton()
                 )}
               </div>
-              <Button variant="outline" className="w-full" onClick={() => navigate('/calendar')}>
-                <Calendar className="w-4 h-4 mr-2" />
+              <Button variant="outline" className="w-full border-cyan-500" onClick={() => navigate('/calendar')}>
+                <Calendar className="w-4 h-4 mr-2 " />
                 View Calendar
               </Button>
               
-              <Button variant="outline" className="w-full" onClick={() => navigate('/tasks')}>
+              <Button variant="outline" className="w-full border-cyan-500" onClick={() => navigate('/tasks')}>
                 <ClipboardList className="w-4 h-4 mr-2" />
                 My Tasks
               </Button>
@@ -546,7 +559,7 @@ export default function Dashboard() {
         </div> 
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="shadow-soft hover:shadow-medium transition-shadow">
+            <Card className="shadow-soft hover:shadow-medium transition-shadow hover:border-orange-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 This Week
@@ -565,7 +578,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-soft hover:shadow-medium transition-shadow">
+          <Card className="shadow-soft hover:shadow-medium transition-shadow hover:border-orange-500  ">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Active Tasks
@@ -579,7 +592,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-soft hover:shadow-medium transition-shadow">
+          <Card className="shadow-soft hover:shadow-medium transition-shadow hover:border-orange-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Team Events
@@ -593,7 +606,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-soft hover:shadow-medium transition-shadow">
+          <Card className="shadow-soft hover:shadow-medium transition-shadow hover:border-orange-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Attendance Rate

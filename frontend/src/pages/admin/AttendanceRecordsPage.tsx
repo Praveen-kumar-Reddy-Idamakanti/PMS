@@ -3,7 +3,9 @@ import { attendanceService } from "@/services/attendance.service";
 import type { AttendanceSummary, AttendanceRecord } from "@/services/attendance.service";
 import * as React from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft, Calendar as CalendarIcon } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon, FileDown, FileText, FileType } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import * as XLSX from 'xlsx';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -103,6 +105,56 @@ const useUserStats = (attendanceSummary?: AttendanceSummary) => {
 export const AttendanceRecordsPage = () => {
   const navigate = useNavigate();
   
+  const handleExportToExcel = () => {
+    if (!userStats.length || !startDate || !endDate) return;
+    
+    // Format date range for display
+    const startFormatted = format(startDate, 'MMM d, yyyy');
+    const endFormatted = format(endDate, 'MMM d, yyyy');
+    const monthYear = format(startDate, 'MMMM yyyy');
+    
+    // Prepare data for Excel
+    const data = userStats.map(stat => ({
+      'Month': monthYear,
+      'Date Range': `${startFormatted} to ${endFormatted}`,
+      'Employee Name': stat.userName,
+      'Employee ID': stat.employeeId || 'N/A',
+      'Days Worked': stat.daysWorked,
+      'Total Check-ins': stat.totalCheckIns,
+      'Total Check-outs': stat.totalCheckOuts,
+      'Total Hours': stat.totalHours.toFixed(2),
+      'Average Hours/Day': stat.avgHoursPerDay.toFixed(2)
+    }));
+    
+    // Auto-size columns
+    const wscols = [
+      {wch: 15}, // Month
+      {wch: 25}, // Date Range
+      {wch: 25}, // Employee Name
+      {wch: 15}, // Employee ID
+      {wch: 12}, // Days Worked
+      {wch: 15}, // Total Check-ins
+      {wch: 15}, // Total Check-outs
+      {wch: 12}, // Total Hours
+      {wch: 15}  // Average Hours/Day
+    ];
+    
+    // Create worksheet with auto-sized columns
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = wscols;
+    
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
+    
+    // Generate file name with month and year
+    const formattedMonthYear = format(startDate, 'MMMM_yyyy');
+    const fileName = `Attendance_Summary_${formattedMonthYear}.xlsx`;
+    
+    // Save the file
+    XLSX.writeFile(wb, fileName);
+  };
+  
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
     const date = new Date();
     date.setDate(1);
@@ -118,16 +170,52 @@ export const AttendanceRecordsPage = () => {
   return (
     <div className="space-y-4 p-6">
       <div className="flex justify-between items-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(-1)}
-          className="rounded-full"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <h1 className="text-2xl font-bold">Attendance Summary</h1>
-        <div className="w-8"></div> {/* Spacer for alignment */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate(-1)}
+            className="rounded-full"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-bold">Attendance Summary</h1>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline"
+              className="gap-2 border-orange-500 text-orange-500 hover:bg-orange-50 hover:text-orange-600"
+              disabled={!userStats.length}
+            >
+              <FileDown className="h-4 w-4" />
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem 
+              onClick={handleExportToExcel}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <FileText className="h-4 w-4 text-green-600" />
+              <span>Export to Excel</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="flex items-center gap-2 text-muted-foreground cursor-not-allowed"
+              disabled
+            >
+              <FileText className="h-4 w-4 text-red-500 opacity-50" />
+              <span>Export to PDF (Coming Soon)</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="flex items-center gap-2 text-muted-foreground cursor-not-allowed"
+              disabled
+            >
+              <FileType className="h-4 w-4 text-blue-500 opacity-50" />
+              <span>Export to Word (Coming Soon)</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">

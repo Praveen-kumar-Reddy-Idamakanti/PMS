@@ -16,7 +16,7 @@ const sendResponse = (res, status, success, message, data = null) => {
  * @access Public
  */
 const register = async (req, res) => {
-    const { name, email, password, role = 'user' } = req.body; // Default to 'user' role if not provided
+    const { name, email, password, employeeId, role = 'user' } = req.body; // Default to 'user' role if not provided
 
     try {
         // Check if user already exists
@@ -29,7 +29,7 @@ const register = async (req, res) => {
         }
 
         // Create new user
-        user = await User.create({ name, email, password, role });
+        user = await User.create({ name, email, password, employeeId, role });
         if (!user) {
             return res.status(500).json({
                 success: false,

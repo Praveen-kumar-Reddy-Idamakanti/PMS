@@ -7,7 +7,12 @@ const { auth, authorize } = require('../middleware/auth');
 // Get admin settings - accessible to all authenticated users
 router.get(
   '/',
-  auth,
+  auth, // Require authentication but no specific role
+  (req, res, next) => {
+    // Log access for debugging
+    console.log(`User ${req.user?.id} (${req.user?.role}) accessing admin settings`);
+    next();
+  },
   adminSettingsController.getAdminSettings
 );
 

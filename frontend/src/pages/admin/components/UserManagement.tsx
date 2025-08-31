@@ -117,7 +117,10 @@ export const UserManagement = () => {
         <div className="flex justify-end mb-4">
           <Dialog open={isRegisterDialogOpen} onOpenChange={setIsRegisterDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button 
+                variant="outline"
+                className="border-orange-500 text-orange-500 hover:bg-orange-50 hover:text-orange-600"
+              >
                 Register New User
               </Button>
             </DialogTrigger>
@@ -258,11 +261,11 @@ export const UserManagement = () => {
               </TableCell>
               <TableCell className="text-right">
                 <Button
-                  variant="destructive"
+                  variant="outline"
                   size="sm"
                   onClick={() => deleteUserMutation.mutate(user.id)}
                   disabled={deleteUserMutation.isPending}
-                  className="bg-destructive/90 hover:bg-destructive text-destructive-foreground"
+                  className="border-destructive text-destructive hover:bg-destructive/90"
                 >
                   {deleteUserMutation.isPending ? 'Deleting...' : 'Delete'}
                 </Button>

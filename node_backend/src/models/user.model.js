@@ -4,15 +4,15 @@ const logger = require('../utils/logger');
 
 class User {
     static async create(userData) {
-        const { name, email, password, role = 'user' } = userData; // Default role to 'user' if not provided
+        const { name, email, password, employeeId, role = 'user' } = userData; // Default role to 'user' if not provided
         const db = getDB();
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         return new Promise((resolve, reject) => {
-            const stmt = db.prepare('INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)');
-            stmt.run(name, email, hashedPassword, role, function (err) {
+            const stmt = db.prepare('INSERT INTO users (name, email, password, employee_id, role) VALUES (?, ?, ?, ?, ?)');
+            stmt.run(name, email, hashedPassword, employeeId, role, function (err) {
                 if (err) {
                     console.error('Error creating user:', err);
                     return reject(err);
@@ -21,6 +21,7 @@ class User {
                     id: this.lastID, 
                     name, 
                     email, 
+                    employee_id: employeeId,
                     role 
                 });
             });

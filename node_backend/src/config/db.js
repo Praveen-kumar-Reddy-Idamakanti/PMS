@@ -21,35 +21,48 @@ let db;
  */
 const connectDB = () => {
     return new Promise((resolve, reject) => {
-        // Enable foreign key support and other PRAGMAs
-        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+        console.log('Connecting to database...');
+        // Close existing connection if any
+        if (dbInstance) {
+            console.log('Closing existing database connection...');
+            dbInstance.close();
+        }
+        
+        // Create new connection
+        console.log(`Creating new database connection to: ${dbPath}`);
+        dbInstance = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
             if (err) {
                 logger.error('❌ Error connecting to the database:', err.message);
                 return reject(err);
             }
             
             // Enable foreign key support and other performance optimizations
-            db.serialize(() => {
+            dbInstance.serialize(() => {
                 // Enable foreign key constraints
-                db.run('PRAGMA foreign_keys = ON');
+                dbInstance.run('PRAGMA foreign_keys = ON');
                 
-                // Enable WAL mode for better concurrency
-                db.run('PRAGMA journal_mode = WAL');
+                // Set journal mode to WAL for better concurrency
+                dbInstance.run('PRAGMA journal_mode = WAL');
                 
-                // Enable synchronous writes (NORMAL is a good balance between safety and performance)
-                db.run('PRAGMA synchronous = NORMAL');
+                // Set synchronous to NORMAL for better performance
+                dbInstance.run('PRAGMA synchronous = NORMAL');
                 
-                // Set busy timeout to handle database locks gracefully
-                db.run('PRAGMA busy_timeout = 5000');
+                // Set cache size (in pages, 1 page = 4KB)
+                dbInstance.run('PRAGMA cache_size = -2000'); // 8MB cache
                 
-                logger.success('✅ Connected to SQLite database with optimized settings');
-                module.exports.db = db; // Store the db instance
-                resolve(db);
+                // Set busy timeout to 5 seconds
+                dbInstance.run('PRAGMA busy_timeout = 5000');
+                
+                // Set the global db reference
+                db = dbInstance;
+                
+                logger.info('✅ Connected to SQLite database with optimized settings');
+                resolve(dbInstance);
             });
         });
         
         // Handle database errors
-        db.on('error', (err) => {
+        dbInstance.on('error', (err) => {
             logger.error('Database error:', err);
             // Attempt to recover from errors
             if (err.code === 'SQLITE_BUSY' || err.code === 'SQLITE_LOCKED') {
@@ -66,10 +79,13 @@ const connectDB = () => {
  * @throws {Error} If the database is not connected
  */
 const getDB = () => {
-    if (!module.exports.db) {
+    console.log('Getting database instance...');
+    if (!dbInstance) {
+        console.error('Database not connected. Call connectDB() first.');
         throw new Error('Database not connected. Call connectDB() first.');
     }
-    return module.exports.db;
+    console.log('Database instance retrieved successfully');
+    return dbInstance;
 };
 
 /**
@@ -145,9 +161,10 @@ const run = async (sql, params = []) => {
     });
 };
 
-// Initialize the db property
-module.exports.db = null;
+// Initialize the db instance
+let dbInstance = null;
 
+// Export the functions
 module.exports = {
     connectDB,
     getDB,

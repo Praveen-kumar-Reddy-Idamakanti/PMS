@@ -106,7 +106,45 @@ const initDatabase = async () => {
       throw error;
     }
     
-    logger.info('✅ Database initialized successfully');
+    // Create remote_attendance_requests table if not exists
+    await run(`
+      CREATE TABLE IF NOT EXISTS remote_attendance_requests (
+        request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        request_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        approved_by INTEGER,
+        approved_at DATETIME,
+        rejected_by INTEGER,
+        rejected_at DATETIME,
+        rejection_reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (rejected_by) REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE(user_id, request_date) ON CONFLICT REPLACE
+      )
+    `);
+    
+    // Verify table was created
+    const tableCheck = await query(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='remote_attendance_requests'"
+    );
+    
+    if (tableCheck && tableCheck.length > 0) {
+      logger.info('✅ Verified remote_attendance_requests table exists');
+      
+      // Log table structure for debugging
+      const tableInfo = await query('PRAGMA table_info(remote_attendance_requests)');
+      logger.debug('remote_attendance_requests table structure:', tableInfo);
+    } else {
+      logger.error('❌ Failed to create remote_attendance_requests table');
+      throw new Error('Failed to create remote_attendance_requests table');
+    }
+
+    logger.info('✅ Database initialization completed successfully');
   } catch (error) {
     logger.error('❌ Failed to initialize database:', error);
     throw error;
@@ -119,9 +157,14 @@ const initDatabase = async () => {
  */
 const checkDatabase = async () => {
   try {
-    const requiredTables = ['users', 'attendance'];
+    const requiredTables = [
+      'users',
+      'attendance',
+      'user_activity',
+      'remote_attendance_requests'
+    ];
     const results = await query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?, ?, ?)",
       requiredTables
     );
     

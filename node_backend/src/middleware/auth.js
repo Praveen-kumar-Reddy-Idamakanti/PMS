@@ -6,27 +6,66 @@ const { UnauthorizedError } = require('../utils/errors');
  */
 const auth = (req, res, next) => {
   try {
-    // Get token from header
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    console.log('Auth middleware - Headers:', req.headers);
     
-    if (!token) {
+    // Get token from header
+    const authHeader = req.header('Authorization');
+    console.log('Auth header:', authHeader);
+    
+    if (!authHeader) {
+      console.error('No Authorization header found');
       throw new UnauthorizedError('No token, authorization denied');
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Add user from payload
-    req.user = decoded.user;
-    next();
-  } catch (err) {
-    if (err.name === 'JsonWebTokenError') {
-      next(new UnauthorizedError('Token is not valid'));
-    } else if (err.name === 'TokenExpiredError') {
-      next(new UnauthorizedError('Token has expired'));
-    } else {
-      next(err);
+    // Check if it's a Bearer token
+    if (!authHeader.startsWith('Bearer ')) {
+      console.error('Invalid token format - missing Bearer prefix');
+      throw new UnauthorizedError('Invalid token format');
     }
+
+    const token = authHeader.replace('Bearer ', '').trim();
+    console.log('Extracted token:', token ? '***token-present***' : 'empty-token');
+    
+    if (!token) {
+      console.error('No token found in Authorization header');
+      throw new UnauthorizedError('No token, authorization denied');
+    }
+
+    try {
+      // Verify token
+      console.log('Verifying token...');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('Token decoded successfully:', { 
+        userId: decoded.user?.id,
+        role: decoded.user?.role,
+        exp: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : null
+      });
+      
+      // Add user from payload
+      req.user = decoded.user;
+      next();
+    } catch (verifyError) {
+      console.error('Token verification failed:', {
+        name: verifyError.name,
+        message: verifyError.message,
+        expiredAt: verifyError.expiredAt,
+        stack: verifyError.stack
+      });
+      
+      if (verifyError.name === 'JsonWebTokenError') {
+        throw new UnauthorizedError('Token is not valid');
+      } else if (verifyError.name === 'TokenExpiredError') {
+        throw new UnauthorizedError('Token has expired');
+      }
+      throw verifyError;
+    }
+  } catch (err) {
+    console.error('Auth middleware error:', {
+      name: err.name,
+      message: err.message,
+      stack: err.stack
+    });
+    next(err);
   }
 };
 

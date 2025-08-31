@@ -1,18 +1,62 @@
 const { validationResult } = require('express-validator');
+const { query } = require('../config/db');
 const AdminSetting = require('../models/adminSetting.model');
 const { NotFoundError, BadRequestError } = require('../utils/errors');
 
-// Get or create admin settings for a user
+// Get admin settings
 const getAdminSettings = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    const settings = await AdminSetting.getOrCreate(userId);
+    console.log('getAdminSettings - User:', req.user);
+    
+    // First try to get any existing settings
+    const sql = 'SELECT * FROM admin_settings LIMIT 1';
+    console.log('Executing SQL:', sql);
+    
+    const rows = await query(sql);
+    console.log('Query result:', rows);
+    
+    let settings = rows[0];
+    
+    // If no settings exist, create default settings
+    if (!settings) {
+      console.log('No settings found, creating default settings');
+      try {
+        // Use current user ID if available, otherwise use system default (1)
+        const userId = req.user?.id || 1;
+        settings = await AdminSetting.create({
+          user_id: userId,
+          company_name: 'My Company',
+          timezone: 'UTC+00:00',
+          photo_check_in: false,
+          location_check_in: false
+        });
+        console.log('Created default settings:', settings);
+      } catch (createError) {
+        console.error('Error creating default settings:', createError);
+        // Even if we can't create default settings, continue with empty settings
+        settings = {
+          company_name: 'My Company',
+          timezone: 'UTC+00:00',
+          photo_check_in: false,
+          location_check_in: false
+        };
+      }
+    }
 
+    console.log('Returning settings:', settings);
     res.json({
       success: true,
       data: settings
     });
   } catch (error) {
+    console.error('Error in getAdminSettings:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code,
+      sql: error.sql,
+      sqlMessage: error.sqlMessage
+    });
     next(error);
   }
 };

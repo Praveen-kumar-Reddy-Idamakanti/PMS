@@ -1,65 +1,8 @@
-import axios from 'axios';
 import { User, UserRole, CreateUserDto } from '@/types/user';
+import api from './api';
 
-const API_URL = 'http://localhost:5001/api'; // Update with your backend URL
-
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add a request interceptor to add the auth token to requests
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Add a response interceptor to handle common errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      const { status, data } = error.response;
-      
-      if (status === 401) {
-        // Unauthorized - token is invalid or expired
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-      }
-      
-      // You can add more specific error handling here
-      return Promise.reject({
-        status,
-        message: data?.message || 'An error occurred',
-      });
-    } else if (error.request) {
-      // The request was made but no response was received
-      return Promise.reject({
-        status: 0,
-        message: 'No response from server. Please check your connection.',
-      });
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      return Promise.reject({
-        status: -1,
-        message: error.message || 'An error occurred',
-      });
-    }
-  }
-);
+// We'll use the shared API instance from api.ts
+// which already has interceptors for adding tokens and handling responses
 
 interface LoginCredentials {
   email?: string;
@@ -104,7 +47,16 @@ export const login = async (credentials: LoginCredentials): Promise<User> => {
       : { email: credentials.email, password: credentials.password };
     
     console.log('Sending login request with body:', requestBody);
-    const response = await api.post<LoginResponse>('/auth/login', requestBody);
+    
+    // Use the shared API instance but with a custom config to skip the auth header
+    // since we don't have a token yet
+    const response = await api.post<LoginResponse>('/auth/login', requestBody, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: undefined // Ensure no Authorization header is set for login
+      }
+    });
+    
     console.log('Login response:', response.data);
     
     if (!response.data.success || !response.data.token) {
@@ -112,7 +64,11 @@ export const login = async (credentials: LoginCredentials): Promise<User> => {
     }
     
     // Store the token in localStorage
-    localStorage.setItem('token', response.data.token);
+    const token = response.data.token;
+    localStorage.setItem('token', token);
+    
+    // Update the default Authorization header for future requests
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     
     // Store user data in localStorage
     if (response.data.user) {
@@ -172,59 +128,77 @@ export const registerUser = async (userData: CreateUserDto): Promise<User> => {
  * Logs out the current user
  */
 export const logout = (): void => {
-  // Clear auth data
+  console.log('Logging out user...');
+  
+  // Clear auth data from localStorage
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   
-  // Redirect to login page
+  // Clear the Authorization header from the API instance
+  delete api.defaults.headers.common['Authorization'];
+  
+  console.log('User logged out, redirecting to login page');
+  
+  // Redirect to login page with a full page reload to reset all states
   window.location.href = '/login';
 };
 
 /**
  * Gets the current authenticated user
- * @returns Promise that resolves with the current user data
+ * @returns Promise that resolves with the current user data or null if not authenticated
  */
 export const getCurrentUser = async (): Promise<User | null> => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    console.log('No token found in localStorage');
+    return null;
+  }
+
   try {
-    const token = localStorage.getItem('token');
-    if (!token) return null;
+    console.log('Fetching current user with token:', token ? '***token-present***' : 'no-token');
     
-    const response = await api.get<{ success: boolean; user: User }>('/auth/user');
+    // Use the shared API instance which already has the token interceptor
+    const response = await api.get<{ success: boolean; user: User }>('/auth/me');
     
-    if (response.data.success && response.data.user) {
-      const user = response.data.user;
-      
-      // Ensure the user object has all required fields
-      const userData: User = {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        employeeId: user.employeeId,
-        role: user.role || UserRole.EMPLOYEE, // Default to EMPLOYEE if role is not provided
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
-      };
-      
-      // Update stored user data
-      localStorage.setItem('user', JSON.stringify(userData));
-      return userData;
+    console.log('Current user response:', {
+      success: response.data.success,
+      hasUser: !!response.data.user,
+      user: response.data.user ? { 
+        id: response.data.user.id,
+        name: response.data.user.name,
+        role: response.data.user.role 
+      } : null
+    });
+    
+    if (response.data && response.data.success && response.data.user) {
+      // Update the user data in localStorage
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      return response.data.user;
     }
     
     return null;
   } catch (error: any) {
-    console.error('Error fetching current user:', error);
+    console.error('Error fetching current user:', {
+      name: error.name,
+      message: error.message,
+      response: error.response ? {
+        status: error.response.status,
+        data: error.response.data
+      } : 'No response',
+      stack: error.stack
+    });
     
-    // Clear auth data on any error
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    // If the error already has a message from the API interceptor, just rethrow it
-    if (error.message && error.message !== 'Network Error') {
-      throw error;
+    // If we get a 401, clear the token as it's likely invalid
+    if (error.response && error.response.status === 401) {
+      console.log('Clearing invalid token due to 401 response');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Clear the Authorization header
+      delete api.defaults.headers.common['Authorization'];
     }
     
-    // For network errors or errors without a message
-    throw new Error(error.message || 'Failed to authenticate. Please try again.');
+    return null;
   }
 };
