@@ -1,95 +1,117 @@
 import { useQuery } from "@tanstack/react-query";
 import { attendanceService } from "@/services/attendance.service";
+import type { AttendanceSummary, AttendanceRecord } from "@/services/attendance.service";
+import * as React from 'react';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { LoadingGif } from "@/components/ui/LoadingGif";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-interface AttendanceApiResponse {
-  id: string;
-  user_id: string | number;
-  name?: string;
-  employee_id?: string;
-  checkin_time?: string | null;
-  checkout_time?: string | null;
-  total_hours?: number;
-  status?: 'present' | 'absent' | 'late' | 'half-day';
-  date?: string;
-  timestamp?: string;
-  type?: 'checkin' | 'checkout';
-}
-
-interface AttendanceRecord {
-  id: string;
+interface UserStats {
   userId: string;
   userName: string;
-  employeeId?: string;
-  checkIn?: string | null;
-  checkOut?: string | null;
-  totalHours?: number;
-  status?: 'present' | 'absent' | 'late' | 'half-day';
-  date?: string;
+  employeeId: string | null;
+  totalCheckIns: number;
+  totalCheckOuts: number;
+  totalHours: number;
+  daysWorked: Set<string>;
 }
+
+const useAttendanceData = (startDate?: Date, endDate?: Date) => {
+  return useQuery<AttendanceSummary>({
+    queryKey: ['attendance-records', startDate, endDate],
+    queryFn: async (): Promise<AttendanceSummary> => {
+      if (!startDate || !endDate) return { 
+        records: [],
+        stats: {
+          totalCheckIns: 0,
+          totalCheckOuts: 0,
+          totalWorkingHours: 0,
+          averageHoursPerDay: 0,
+          daysWorked: 0
+        }
+      };
+      
+      return attendanceService.getAttendanceSummary({
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
+      });
+    },
+    enabled: !!startDate && !!endDate
+  });
+};
+
+const useUserStats = (attendanceSummary?: AttendanceSummary) => {
+  return useMemo(() => {
+    if (!attendanceSummary?.records) return [];
+    
+    const userMap = new Map<string, UserStats>();
+    
+    // Process all records
+    attendanceSummary.records.forEach(record => {
+      if (!record.date) return; // Skip records without a date
+      
+      const userId = record.userId;
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          userId,
+          userName: record.userName,
+          employeeId: record.employeeId,
+          totalCheckIns: 0,
+          totalCheckOuts: 0,
+          totalHours: 0,
+          daysWorked: new Set()
+        });
+      }
+      
+      const user = userMap.get(userId)!;
+      const recordDate = new Date(record.date).toISOString().split('T')[0];
+      
+      // Count check-ins and check-outs
+      if (record.checkIn) {
+        user.totalCheckIns++;
+        user.daysWorked.add(recordDate);
+      }
+      if (record.checkOut) {
+        user.totalCheckOuts++;
+      }
+      
+      // Only add hours if we have a valid check-in/check-out pair
+      if (record.checkIn && record.checkOut) {
+        user.totalHours += record.totalHours || 0;
+      }
+    });
+    
+    // Calculate averages and return the results
+    return Array.from(userMap.values()).map(user => ({
+      ...user,
+      daysWorked: user.daysWorked.size,
+      avgHoursPerDay: user.daysWorked.size > 0 
+        ? parseFloat((user.totalHours / user.daysWorked.size).toFixed(2)) 
+        : 0,
+      totalHours: parseFloat(user.totalHours.toFixed(2))
+    }));
+  }, [attendanceSummary]);
+};
 
 export const AttendanceRecordsPage = () => {
   const navigate = useNavigate();
   
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
     const date = new Date();
-    date.setDate(1); // First day of current month
+    date.setDate(1);
     return date;
   });
   
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
-
-  const { data: attendanceData, isLoading } = useQuery<AttendanceRecord[]>({
-    queryKey: ['attendance-records', startDate, endDate],
-    queryFn: async () => {
-      if (!startDate || !endDate) return [];
-      const response = await attendanceService.getAttendanceSummary({
-        startDate: format(startDate, 'yyyy-MM-dd'),
-        endDate: format(endDate, 'yyyy-MM-dd'),
-      }) as unknown as AttendanceApiResponse[];
-      
-      // Group records by user and date
-      const recordsByUserAndDate: Record<string, AttendanceRecord> = {};
-      
-      response.forEach(record => {
-        const date = record.date || (record.checkin_time ? record.checkin_time.split('T')[0] : '');
-        const key = `${record.user_id}_${date}`;
-        
-        if (!recordsByUserAndDate[key]) {
-          recordsByUserAndDate[key] = {
-            id: record.id,
-            userId: record.user_id?.toString() || '',
-            userName: record.name || 'Unknown User',
-            employeeId: record.employee_id,
-            date: date,
-            status: record.status || 'absent'
-          };
-        }
-        
-        // Update check-in/check-out times
-        if (record.checkin_time) {
-          recordsByUserAndDate[key].checkIn = record.checkin_time;
-        }
-        if (record.checkout_time) {
-          recordsByUserAndDate[key].checkOut = record.checkout_time;
-        }
-        if (record.total_hours) {
-          recordsByUserAndDate[key].totalHours = record.total_hours;
-        }
-      });
-      
-      return Object.values(recordsByUserAndDate);
-    },
-  });
+  const { data: attendanceSummary, isLoading } = useAttendanceData(startDate, endDate);
+  const userStats = useUserStats(attendanceSummary);
 
   if (isLoading) return <LoadingGif text="Loading attendance records..." />;
 
@@ -98,30 +120,29 @@ export const AttendanceRecordsPage = () => {
       <div className="flex justify-between items-center">
         <Button
           variant="ghost"
-          className="gap-2"
-          onClick={() => navigate('/admin/attendance')}
+          size="icon"
+          onClick={() => navigate(-1)}
+          className="rounded-full"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Attendance
         </Button>
-        <h1 className="text-2xl font-bold">Attendance Records</h1>
-        <div className="w-[136px]"></div> {/* Spacer for alignment */}
+        <h1 className="text-2xl font-bold">Attendance Summary</h1>
+        <div className="w-8"></div> {/* Spacer for alignment */}
       </div>
 
-      <div className="flex items-center space-x-4 mb-6">
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-muted-foreground">From:</span>
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 className={cn(
-                  "w-[240px] justify-start text-left font-normal",
-                  !startDate && "text-muted-foreground"
+                  'w-full md:w-[240px] justify-start text-left font-normal',
+                  !startDate && 'text-muted-foreground'
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+                {startDate ? format(startDate, 'PPP') : <span>Start date</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -133,21 +154,21 @@ export const AttendanceRecordsPage = () => {
               />
             </PopoverContent>
           </Popover>
-        </div>
 
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-muted-foreground">To:</span>
+          <span className="self-center hidden md:inline">to</span>
+          <span className="self-center md:hidden">End Date</span>
+
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 className={cn(
-                  "w-[240px] justify-start text-left font-normal",
-                  !endDate && "text-muted-foreground"
+                  'w-full md:w-[240px] justify-start text-left font-normal',
+                  !endDate && 'text-muted-foreground'
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                {endDate ? format(endDate, 'PPP') : <span>End date</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -166,40 +187,45 @@ export const AttendanceRecordsPage = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
               <TableHead>Employee</TableHead>
               <TableHead>Employee ID</TableHead>
-              <TableHead>Check In</TableHead>
-              <TableHead>Check Out</TableHead>
+              <TableHead>Days Worked</TableHead>
+              <TableHead>Total Check-ins</TableHead>
+              <TableHead>Total Check-outs</TableHead>
               <TableHead>Total Hours</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Avg. Hours/Day</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {attendanceData?.map((record) => (
-              <TableRow key={`${record.userId}-${record.date}`}>
-                <TableCell>{record.date ? format(new Date(record.date), 'PPP') : '-'}</TableCell>
-                <TableCell>{record.userName || 'Unknown User'}</TableCell>
-                <TableCell>{record.employeeId || 'N/A'}</TableCell>
-                <TableCell>{record.checkIn ? format(new Date(record.checkIn), 'PPpp') : '-'}</TableCell>
-                <TableCell>{record.checkOut ? format(new Date(record.checkOut), 'PPpp') : '-'}</TableCell>
-                <TableCell>{record.totalHours?.toFixed(2) || '0.00'} hrs</TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    record.status === 'present' ? 'bg-green-100 text-green-800' :
-                    record.status === 'absent' ? 'bg-red-100 text-red-800' :
-                    record.status === 'late' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {record.status || 'Unknown'}
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}
-            {!attendanceData?.length && (
+            {userStats.length > 0 ? (
+              userStats.map((user) => (
+                <TableRow key={`${user.userId}-${user.employeeId}`}>
+                  <TableCell className="font-medium">{user.userName}</TableCell>
+                  <TableCell>{user.employeeId || 'N/A'}</TableCell>
+                  <TableCell>{user.daysWorked}</TableCell>
+                  <TableCell>{user.totalCheckIns}</TableCell>
+                  <TableCell>{user.totalCheckOuts}</TableCell>
+                  <TableCell>{user.totalHours.toFixed(2)} hrs</TableCell>
+                  <TableCell>{user.avgHoursPerDay.toFixed(2)} hrs</TableCell>
+                </TableRow>
+              ))
+            ) : (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  No attendance records found for the selected date range
+                  {isLoading ? 'Loading...' : 'No attendance data found for the selected date range'}
+                </TableCell>
+              </TableRow>
+            )}
+            
+            {attendanceSummary?.stats && (
+              <TableRow className="bg-gray-50 font-medium">
+                <TableCell colSpan={2} className="text-right">Summary:</TableCell>
+                <TableCell>{attendanceSummary.records?.length ? new Set(attendanceSummary.records.map(r => r.date)).size : 0} days</TableCell>
+                <TableCell>{attendanceSummary.stats.totalCheckIns}</TableCell>
+                <TableCell>{attendanceSummary.stats.totalCheckOuts}</TableCell>
+                <TableCell>{attendanceSummary.stats.totalWorkingHours.toFixed(2)} hrs</TableCell>
+                <TableCell>
+                  {attendanceSummary.stats.averageHoursPerDay.toFixed(2)} hrs
                 </TableCell>
               </TableRow>
             )}

@@ -20,10 +20,11 @@ export const AttendanceManagement = () => {
     queryKey: ['admin-attendance', date],
     queryFn: async () => {
       if (!date) return [];
-      const formattedDate = format(date, 'yyyy-MM-dd');
-      const data = await attendanceService.getAttendanceByDate({ date: formattedDate });
-      console.log('Attendance Data:', data);
-      return data;
+      const startDate = format(date, 'yyyy-MM-dd');
+      const endDate = format(date, 'yyyy-MM-dd');
+      const data = await attendanceService.getAttendanceSummary({ startDate, endDate });
+      // Filter out users who haven't checked in
+      return (data.records || []).filter(record => record.checkIn !== null);
     },
   });
 
@@ -97,35 +98,43 @@ export const AttendanceManagement = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Array.isArray(attendanceData) && attendanceData.map((record) => (
-              <TableRow key={record.id}>
-                <TableCell>{record.userName || 'Unknown User'}</TableCell>
-                <TableCell>
-                  {record.checkIn ? format(new Date(record.checkIn), 'PPpp') : 'Not checked in'}
-                </TableCell>
-                <TableCell>
-                  {record.checkOut ? format(new Date(record.checkOut), 'PPpp') : 'Not checked out'}
-                </TableCell>
-                <TableCell>
-                  {record.totalHours ? `${record.totalHours.toFixed(2)}h` : 'Not checked out'}
-                </TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    record.status === 'present' 
-                      ? 'bg-green-100 text-green-800' 
-                      : record.status === 'half-day'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : record.status === 'late'
-                      ? 'bg-orange-100 text-orange-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {record.status === 'present' ? 'Present' : 
-                     record.status === 'half-day' ? 'Half Day' :
-                     record.status === 'late' ? 'Late' : 'Absent'}
-                  </span>
+            {Array.isArray(attendanceData) && attendanceData.length > 0 ? (
+              attendanceData.map((record, index) => (
+                <TableRow key={`${record.userId}_${record.date}_${index}`}>
+                  <TableCell>{record.userName || 'Unknown User'}</TableCell>
+                  <TableCell>
+                    {record.checkIn ? format(new Date(record.checkIn), 'PPpp') : 'Not checked in'}
+                  </TableCell>
+                  <TableCell>
+                    {record.checkOut ? format(new Date(record.checkOut), 'PPpp') : 'Not checked out'}
+                  </TableCell>
+                  <TableCell>
+                    {record.totalHours ? `${record.totalHours.toFixed(2)}h` : 'N/A'}
+                  </TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      record.status === 'present' 
+                        ? 'bg-green-100 text-green-800' 
+                        : record.status === 'half-day'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : record.status === 'late'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {record.status === 'present' ? 'Present' : 
+                      record.status === 'half-day' ? 'Half Day' :
+                      record.status === 'late' ? 'Late' : 'Absent'}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-4">
+                  No attendance records found for selected date
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </div>

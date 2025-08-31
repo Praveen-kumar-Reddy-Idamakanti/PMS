@@ -28,8 +28,10 @@ exports.getAllAttendance = async (req, res, next) => {
     }
     
     if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);  // Set to end of the day
       sqlQuery += ' AND timestamp <= ?';
-      params.push(new Date(endDate).toISOString());
+      params.push(end.toISOString());
     }
     
     if (user_id) {
