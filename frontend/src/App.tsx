@@ -11,6 +11,7 @@ import RegisterUser from "./pages/RegisterUser";
 import Dashboard from "./pages/Dashboard";
 import Calendar from "./pages/Calendar";
 import Tasks from "./pages/Tasks";
+import Requests from "./pages/Requests";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AttendancePage } from "./pages/admin/AttendancePage";
 import { AttendanceRecordsPage } from "./pages/admin/AttendanceRecordsPage";
@@ -87,6 +88,11 @@ const App = () => {
               <Route path="/tasks" element={
                 <MainLayout>
                   <Tasks />
+                </MainLayout>
+              } />
+              <Route path="/requests" element={
+                <MainLayout>
+                  <Requests />
                 </MainLayout>
               } />
               

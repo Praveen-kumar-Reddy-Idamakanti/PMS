@@ -1,7 +1,7 @@
 const API_BASE_URL = 'http://localhost:5001/api';
 
 // Helper function to handle API requests
-async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
+export async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   
   const headers = new Headers(options.headers || {});
@@ -9,7 +9,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   headers.set('Accept', 'application/json');
   
   if (token) {
-    headers.set('x-auth-token', token);
+    headers.set('Authorization', `Bearer ${token}`);
   }
   
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {

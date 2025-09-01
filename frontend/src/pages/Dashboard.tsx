@@ -41,6 +41,8 @@ interface CheckInOutData {
   photo?: string;
   type: 'checkin' | 'checkout';
   timestamp?: string;
+  isRemote?: boolean;
+  reason?: string;
 }
 
 export interface TodayStatus {
@@ -247,48 +249,46 @@ export default function Dashboard() {
     }
   }, [navigate]);
 
-  const handleCheckIn = async (data: CheckInOutData) => {
+  const handleCheckIn = async (data: CheckInOutData & { isRemote?: boolean }) => {
     setIsLoading(true);
-    
     try {
-      // First get current status to prevent race conditions
+      // Get current status to prevent race conditions
       const currentStatus = await attendanceService.getTodaysStatus();
-      
       if (currentStatus.status === 'checked_in') {
         throw new Error('You have already checked in today');
       }
-      
       if (currentStatus.status === 'checked_out') {
         throw new Error('You have already checked out for today');
       }
-
-      const checkInData: any = {
+      // Prepare check-in data
+      let checkInData: any = {
         ...data,
         type: 'checkin',
         timestamp: new Date().toISOString(),
+        isRemote: !!data.isRemote,
+        mode: data.isRemote ? 'remote' : 'office',
       };
-      
-      // Check if we have valid location data
-      if (!data.location?.latitude || !data.location?.longitude) {
-        throw new Error('Please allow location access to check in');
+      if (checkInData.isRemote) {
+        if (!data.notes?.trim() && !data.reason?.trim()) {
+          throw new Error('Please provide a reason for remote work');
+        }
+      } else {
+        if (!data.location?.latitude || !data.location?.longitude) {
+          throw new Error('Location is required for office check-in');
+        }
       }
-
-      // Call the checkIn service with the location data
+      // Call the checkIn service
       await attendanceService.checkIn(checkInData);
-      
       // Invalidate and refetch today's status
       await queryClient.invalidateQueries({ queryKey: ['todayStatus'] });
-      
-      // Get the updated status
       const updatedStatus = await queryClient.fetchQuery({
         queryKey: ['todayStatus'],
         queryFn: attendanceService.getTodaysStatus,
       });
-      
       // Verify the check-in was successful
       if (updatedStatus?.status === 'checked_in' || updatedStatus?.isCheckedIn) {
         toast({
-          title: 'Checked in successfully!',
+          title: `Checked in ${checkInData.isRemote ? 'remotely' : ''} successfully!`,
           description: `You're now checked in at ${new Date().toISOString()}`,
         });
         setIsCheckInModalOpen(false);
@@ -304,7 +304,7 @@ export default function Dashboard() {
         description: errorMessage,
         variant: 'destructive',
       });
-      throw error; // Re-throw to allow the modal to handle the error
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -624,11 +624,12 @@ export default function Dashboard() {
 
       {/* Check In Modal */}
       <CheckInOutModal
-        isOpen={isCheckInModalOpen}
-        onClose={() => !isLoading && setIsCheckInModalOpen(false)}
-        type="checkin"
-        onSubmit={handleCheckIn}
-        isLoading={isLoading}
+  isOpen={isCheckInModalOpen}
+  onClose={() => !isLoading && setIsCheckInModalOpen(false)}
+  type="checkin"
+  onSubmit={handleCheckIn}
+  isLoading={isLoading}
+  showRemoteOption={true}
       />
       <CheckInOutModal
         isOpen={isCheckOutModalOpen}

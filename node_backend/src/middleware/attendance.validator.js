@@ -3,17 +3,17 @@ const { body, query } = require('express-validator');
 // Common validation rules for location
 const locationValidation = [
     body('location.latitude')
-        .if(body('location').exists())
+        .if((value, { req }) => req.body.location && !req.body.isRemote)
         .isFloat({ min: -90, max: 90 })
         .withMessage('Latitude must be a valid coordinate between -90 and 90'),
     
     body('location.longitude')
-        .if(body('location').exists())
+        .if((value, { req }) => req.body.location && !req.body.isRemote)
         .isFloat({ min: -180, max: 180 })
         .withMessage('Longitude must be a valid coordinate between -180 and 180'),
     
     body('location.address')
-        .if(body('location').exists())
+        .if((value, { req }) => req.body.location && !req.body.isRemote)
         .optional()
         .isString()
         .withMessage('Address must be a string')
@@ -24,6 +24,11 @@ const locationValidation = [
 
 // Validation rules for check-in/check-out
 const checkInOutValidation = [
+    body('isRemote')
+        .optional()
+        .isBoolean()
+        .withMessage('isRemote must be a boolean'),
+        
     body('notes')
         .optional()
         .isString()
@@ -34,12 +39,13 @@ const checkInOutValidation = [
     
     body('photo')
         .optional()
+        .if((value, { req }) => !req.body.isRemote) // Only validate photo if not remote
         .isString()
         .withMessage('Photo must be a base64 encoded string')
         .isLength({ max: 10485760 }) // ~10MB
         .withMessage('Photo size is too large (max 10MB)'),
     
-    // Add location validation
+    // Add location validation (will be skipped if isRemote is true)
     ...locationValidation
 ];
 

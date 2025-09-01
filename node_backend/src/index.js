@@ -7,22 +7,14 @@ const { initDatabase } = require('./config/initDb');
 const logger = require('./utils/logger');
 const requestLogger = require('./middleware/requestLogger');
 
-// Import routes with debug logging
-console.log('Importing routes...');
+// Import routes
 const authRoutes = require('./routes/auth.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const adminRoutes = require('./routes/admin.routes');
 const activityLogsRoutes = require('./routes/activityLogs.routes');
 const adminSettingsRoutes = require('./routes/adminSettings.routes');
-
-console.log('Importing remote attendance routes...');
 const remoteAttendanceRoutes = require('./routes/remoteAttendanceRoutes');
-console.log('Remote attendance routes imported:', remoteAttendanceRoutes ? '✅' : '❌');
-console.log('Remote attendance routes stack:', remoteAttendanceRoutes?.stack ? '✅' : '❌');
-
 const adminRemoteAttendanceRoutes = require('./routes/adminRemoteAttendanceRoutes');
-console.log('Admin remote attendance routes imported:', adminRemoteAttendanceRoutes ? '✅' : '❌');
-console.log('Admin remote attendance routes stack:', adminRemoteAttendanceRoutes?.stack ? '✅' : '❌');
 
 const app = express();
 
@@ -42,21 +34,16 @@ const corsOptions = {
   optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 };
 
-// Log CORS errors
+// Handle CORS errors
 app.use((err, req, res, next) => {
   if (err) {
-    logger.error('CORS Error:', err);
+    logger.error(`CORS Error: ${err.message}`);
     return res.status(500).json({ error: 'CORS Error', details: err.message });
   }
   next();
 });
 
-// Add CORS debugging middleware
-app.use((req, res, next) => {
-  console.log(`CORS Debug - ${req.method} ${req.url} from origin: ${req.headers.origin}`);
-  console.log('Headers:', req.headers);
-  next();
-});
+// CORS middleware is already configured above
 
 // Enable CORS with options
 app.use(cors(corsOptions));

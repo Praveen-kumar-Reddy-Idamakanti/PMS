@@ -32,16 +32,12 @@ const requestLogger = async (req, res, next) => {
     return next();
   }
 
-  // Log the incoming request
-  logger.request(req);
-
   // Store the original response methods
   const originalSend = res.send;
   const originalJson = res.json;
   const originalEnd = res.end;
 
   let responseSent = false;
-  let responseBody;
 
   // Helper to log the response
   const logResponse = (body) => {
@@ -51,19 +47,33 @@ const requestLogger = async (req, res, next) => {
     const responseTime = Date.now() - start;
     const { statusCode } = res;
     
-    // Log the response
+    // Only log errors
     if (statusCode >= 400) {
       logger.error(`[${statusCode}] ${req.method} ${req.originalUrl} - ${responseTime}ms`);
-    } else {
-      logger.http(`[${statusCode}] ${req.method} ${req.originalUrl} - ${responseTime}ms`);
     }
 
     // Log activity for successful state-changing requests
     if (statusCode < 400 && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      let activityType = 'SYSTEM_EVENT';
+      const path = req.originalUrl.toLowerCase();
+      
+      if (path.includes('/api/attendance/checkin')) {
+        activityType = 'USER_CHECKIN';
+      } else if (path.includes('/api/attendance/checkout')) {
+        activityType = 'USER_CHECKOUT';
+      } else if (path.includes('/api/remote-attendance/request')) {
+        activityType = 'ADMIN_ACTION';
+      } else if (path.includes('/api/users')) {
+        activityType = req.method === 'POST' ? 'USER_CREATE' : 
+                     req.method === 'PUT' || req.method === 'PATCH' ? 'USER_UPDATE' :
+                     req.method === 'DELETE' ? 'USER_DELETE' : 'SYSTEM_EVENT';
+      }
+      
       logActivity(
         req.user?.id || null,
-        `${req.method}_${req.route?.path?.replace(/\//g, '_').replace(/:/g, '') || 'unknown_route'}`,
+        activityType,
         {
+          action: `${req.method} ${req.originalUrl}`,
           method: req.method,
           path: req.originalUrl,
           statusCode,

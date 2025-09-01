@@ -63,6 +63,15 @@ export function MainLayout({ children }: MainLayoutProps) {
               >
                 Tasks
               </Link>
+              <Link
+                to="/requests"
+                className={cn(
+                  'text-sm font-medium transition-colors hover:text-primary',
+                  location.pathname === '/requests' ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
+                Requests
+              </Link>
               {isSuperAdmin && (
                 <Link
                   to="/admin"

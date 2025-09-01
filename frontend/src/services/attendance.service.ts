@@ -54,15 +54,18 @@ const checkIn = async (data: {
     address?: string;
   };
   photo?: string; // Base64 encoded image
+  isRemote?: boolean;
 }) => {
   try {
-    // Ensure we send the current date in ISO format with timezone offset
     const timestamp = new Date();
     const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
     
     const response = await api.post('/attendance/checkin', {
       ...data,
-      timezoneOffset // Send the client's timezone offset
+      type: 'checkin',
+      timestamp: timestamp.toISOString(),
+      mode: data.isRemote ? 'remote' : 'office',
+      timezoneOffset
     });
     return response.data;
   } catch (error: any) {
@@ -78,15 +81,18 @@ const checkOut = async (data: {
     longitude: number;
     address: string;
   };
+  isRemote?: boolean;
 }) => {
   try {
-    // Ensure we send the current date in ISO format with timezone offset
     const timestamp = new Date();
     const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
     
     const response = await api.post('/attendance/checkout', {
       ...data,
-      timezoneOffset // Send the client's timezone offset
+      type: 'checkout',
+      timestamp: timestamp.toISOString(),
+      mode: data.isRemote ? 'remote' : 'office',
+      timezoneOffset
     });
     return response.data;
   } catch (error: any) {
@@ -121,15 +127,21 @@ const getTodaysStatus = async () => {
     const isCheckedOut = status === 'checked_out';
     
     // Transform the response to match our expected format
-    const result = {
-      status,
-      isCheckedIn,
-      needsCheckIn: !isCheckedIn && !isCheckedOut, // Only need check-in if not checked in or out
-      checkInTime: responseData.checkInTime || null,
-      checkOutTime: responseData.checkOutTime || null,
-      hoursWorked: responseData.hoursWorked || 0,
-      lastAction: responseData.lastAction || null
-    };
+    // In attendance.service.ts, update the getTodaysStatus function:
+const result = {
+  status,
+  isCheckedIn,
+  needsCheckIn: !isCheckedIn && !isCheckedOut,
+  checkInTime: responseData.checkInTime || null,
+  checkOutTime: responseData.checkOutTime || null,
+  hoursWorked: responseData.hoursWorked || 0,
+  lastAction: responseData.lastAction ? {
+    ...responseData.lastAction,
+    // Normalize isRemote to mode
+    mode: responseData.lastAction.mode || 
+          (responseData.lastAction.isRemote ? 'remote' : 'office')
+  } : null
+};
     
     console.log('Processed status:', result); // Debug log
     return result;

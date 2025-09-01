@@ -4,17 +4,10 @@ const logger = require('../utils/logger');
 
 // Request remote work
 const requestRemoteWork = async (req, res) => {
-  console.log('=== requestRemoteWork called ===');
-  console.log('Request body:', req.body);
   const { request_date, reason } = req.body;
   const userId = req.user ? req.user.id : 'unknown';
   
-  console.log('User ID:', userId);
-  console.log('Request date:', request_date);
-  console.log('Reason:', reason);
-  
   try {
-    console.log('Getting database instance...');
     const db = getDB();
     if (!db) {
       console.error('❌ Database connection is not available');
@@ -24,27 +17,7 @@ const requestRemoteWork = async (req, res) => {
         error: 'Database connection not available'
       });
     }
-    console.log('✅ Database connection verified');
     
-    // Debug: Check if we can query the database
-    try {
-      const testQuery = await new Promise((resolve, reject) => {
-        db.get('SELECT 1 as test', [], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
-      console.log('✅ Test query successful:', testQuery);
-    } catch (testErr) {
-      console.error('❌ Test query failed:', testErr);
-      return res.status(500).json({
-        success: false,
-        message: 'Database test query failed',
-        error: testErr.message
-      });
-    }
-
-    console.log('Checking for existing request...');
     // Check if request already exists for this date
     const existingRequest = await new Promise((resolve, reject) => {
       db.get(
@@ -58,7 +31,6 @@ const requestRemoteWork = async (req, res) => {
     });
     
     if (existingRequest) {
-      console.log('❌ Request already exists for this date');
       return res.status(400).json({ 
         success: false,
         message: 'A request already exists for this date',
@@ -66,7 +38,6 @@ const requestRemoteWork = async (req, res) => {
       });
     }
 
-    console.log('Creating new remote work request...');
     // Create new request
     try {
       const result = await new Promise((resolve, reject) => {
@@ -78,29 +49,28 @@ const requestRemoteWork = async (req, res) => {
               console.error('❌ Error inserting request:', err);
               reject(err);
             } else {
-              console.log('✅ Request created with ID:', this.lastID);
-              resolve({ lastID: this.lastID });
+                      resolve({ lastID: this.lastID });
             }
           }
         );
       });
 
       // Log activity
-      console.log('Logging activity...');
       try {
         await logActivity(
           userId,
-          'remote_request_created',
-          { date: request_date },
+          'ADMIN_ACTION',
+          { 
+            action: 'remote_request_created',
+            request_date: request_date,
+            request_id: result.lastID
+          },
           req
         );
-        console.log('✅ Activity logged successfully');
       } catch (logError) {
-        console.error('❌ Failed to log activity (non-critical):', logError);
         // Continue even if activity logging fails
       }
 
-      console.log('✅ Request completed successfully');
       return res.status(201).json({
         success: true,
         message: 'Remote work request submitted successfully',
@@ -123,7 +93,7 @@ const requestRemoteWork = async (req, res) => {
 
 // Approve remote work request (Admin only)
 const approveRemoteRequest = async (req, res) => {
-  const { requestId } = req.params;
+  const { id: requestId } = req.params;
   const adminId = req.user.id;
   const db = getDB();
 
@@ -174,21 +144,39 @@ const approveRemoteRequest = async (req, res) => {
         'UPDATE remote_attendance_requests SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE request_id = ?',
         ['approved', adminId, requestId],
         function(err) {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            console.error('Error updating request status:', err);
+            reject(err);
+          } else {
+            console.log(`Request ${requestId} status updated to approved by admin ${adminId}`);
+            resolve();
+          }
         }
       );
     });
 
-    // Create attendance record
+    // Create attendance record - set to 10:00 AM in the requested date's timezone
+    const attendanceDate = new Date(request.request_date);
+    // Format as YYYY-MM-DD 10:00:00 in local time
+    const year = attendanceDate.getFullYear();
+    const month = String(attendanceDate.getMonth() + 1).padStart(2, '0');
+    const day = String(attendanceDate.getDate()).padStart(2, '0');
+    const timestamp = `${year}-${month}-${day} 10:00:00`;
+    console.log(`Creating attendance record for user ${request.user_id} at ${timestamp}`);
+    
     await new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO attendance (user_id, type, timestamp, mode, created_at, updated_at)
-         VALUES (?, 'check_in', datetime(?), 'remote', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [request.user_id, request.request_date + ' 09:00:00'],
+        `INSERT INTO attendance (user_id, type, timestamp,mode, created_at)
+         VALUES (?, 'checkin', ?, 'remote', datetime('now'))`,
+        [request.user_id, timestamp],
         function(err) {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            console.error('Error creating attendance record:', err);
+            reject(err);
+          } else {
+            console.log(`Attendance record created with ID: ${this.lastID}`);
+            resolve();
+          }
         }
       );
     });
@@ -196,8 +184,9 @@ const approveRemoteRequest = async (req, res) => {
     // Log activity
     await logActivity(
       adminId,
-      'remote_request_approved',
+      'ADMIN_ACTION',
       { 
+        action: 'remote_request_approved',
         targetUserId: request.user_id, 
         date: request.request_date,
         requestId: requestId
@@ -231,10 +220,19 @@ const approveRemoteRequest = async (req, res) => {
 
 // Reject remote work request (Admin only)
 const rejectRemoteRequest = async (req, res) => {
-  const { requestId } = req.params;
-  const { reason: rejectionReason } = req.body;
+  console.log('Reject request received:', { params: req.params, body: req.body });
+  const { id: requestId } = req.params;
+  const { comments: rejectionReason } = req.body;
   const adminId = req.user.id;
   const db = getDB();
+
+  if (!requestId) {
+    return res.status(400).json({ message: 'Request ID is required' });
+  }
+
+  if (!rejectionReason) {
+    return res.status(400).json({ message: 'Rejection reason is required' });
+  }
 
   try {
     // Start transaction
@@ -277,14 +275,20 @@ const rejectRemoteRequest = async (req, res) => {
       return res.status(400).json({ message: 'Request is not in pending status' });
     }
 
-    // Update request status
+    // Update request status to rejected
+    console.log(`Rejecting request ${requestId} with reason: ${rejectionReason}`);
     await new Promise((resolve, reject) => {
       db.run(
         'UPDATE remote_attendance_requests SET status = ?, rejected_by = ?, rejected_at = CURRENT_TIMESTAMP, rejection_reason = ? WHERE request_id = ?',
         ['rejected', adminId, rejectionReason, requestId],
         function(err) {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            console.error('Error updating request status to rejected:', err);
+            reject(err);
+          } else {
+            console.log(`Request ${requestId} rejected by admin ${adminId}`);
+            resolve();
+          }
         }
       );
     });
@@ -292,8 +296,9 @@ const rejectRemoteRequest = async (req, res) => {
     // Log activity
     await logActivity(
       adminId,
-      'remote_request_rejected',
+      'ADMIN_ACTION',
       { 
+        action: 'remote_request_rejected',
         targetUserId: request.user_id, 
         date: request.request_date,
         requestId: requestId,
@@ -322,7 +327,32 @@ const rejectRemoteRequest = async (req, res) => {
       });
     });
     console.error('Error rejecting remote work request:', error);
-    res.status(500).json({ message: 'Failed to reject remote work request' });
+    // Rollback in case of any error
+    try {
+      await new Promise((resolve) => {
+        db.run('ROLLBACK', (rollbackErr) => {
+          if (rollbackErr) console.error('Error during rollback:', rollbackErr);
+          resolve();
+        });
+      });
+    } catch (rollbackError) {
+      console.error('Error during rollback after rejection failed:', rollbackError);
+    }
+    
+    const errorMessage = error.message || 'Failed to reject remote work request';
+    console.error('Full error details:', {
+      error: error.message,
+      stack: error.stack,
+      requestId,
+      adminId,
+      rejectionReason
+    });
+    
+    res.status(500).json({ 
+      message: 'Failed to reject remote work request',
+      details: errorMessage,
+      requestId
+    });
   }
 };
 

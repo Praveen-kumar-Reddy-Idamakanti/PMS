@@ -40,11 +40,12 @@ class Attendance {
             type: attendanceData.type,
             userId: attendanceData.userId,
             hasLocation: !!attendanceData.location,
-            hasPhoto: !!attendanceData.photo
+            hasPhoto: !!attendanceData.photo,
+            mode: attendanceData.mode || 'office' // Default to 'office' if not specified
         });
         
         const db = getDB();
-        const { userId, type, notes, location, photo } = attendanceData;
+        const { userId, type, notes, location, photo, mode = 'office' } = attendanceData;
         const now = new Date().toISOString();
 
         return new Promise((resolve, reject) => {
@@ -56,7 +57,8 @@ class Attendance {
                 location?.latitude || null,
                 location?.longitude || null,
                 location?.address || null,
-                photo || null
+                photo || null,
+                mode
             ];
             
             debugModel('create', 'Executing database insert', { 
@@ -65,12 +67,13 @@ class Attendance {
                 timestamp: now,
                 hasNotes: !!notes,
                 hasLocation: !!location,
-                hasPhoto: !!photo
+                hasPhoto: !!photo,
+                mode
             });
             
             db.run(
-                `INSERT INTO attendance (user_id, type, timestamp, notes, latitude, longitude, address, photo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO attendance (user_id, type, timestamp, notes, latitude, longitude, address, photo, mode)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 params,
                 function(err) {
                     if (err) {
@@ -156,7 +159,8 @@ class Attendance {
                         longitude: row.longitude,
                         address: row.address
                     } : null,
-                    photo: row.photo
+                    photo: row.photo,
+                    mode: row.mode || 'office' // Default to 'office' for backward compatibility
                 })));
             });
         });

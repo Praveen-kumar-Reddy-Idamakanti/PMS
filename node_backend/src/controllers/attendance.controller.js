@@ -97,12 +97,41 @@ const checkOut = async (req, res) => {
         if (!errors.isEmpty()) {
             return res.status(400).json({ success: false, errors: errors.array() });
         }
-        const { notes, location, photo } = req.body;
+        const { notes, location, photo, isRemote = false } = req.body;
         const userId = req.user.id;
+        const db = require('../config/db').getDB();
+        
+        // Get the latest check-in to determine the mode
+        const latestCheckIn = await new Promise((resolve) => {
+            db.get(
+                `SELECT mode FROM attendance 
+                WHERE user_id = ? 
+                AND type = 'checkin'
+                ORDER BY timestamp DESC
+                LIMIT 1`,
+                [userId],
+                (err, row) => {
+                    if (err) {
+                        console.error('Error getting latest check-in:', err);
+                        return resolve(null);
+                    }
+                    resolve(row);
+                }
+            );
+        });
+
+        const isRemoteMode = latestCheckIn?.mode === 'remote';
+
+        // Validate location based on mode
+        if (!isRemoteMode && !location) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Location is required for office checkouts' 
+            });
+        }
 
         // First check if user has already checked out today (considering timezone)
         const timezoneOffset = req.body.timezoneOffset || 0; // Get timezone offset in hours
-        const db = require('../config/db').getDB();
         
         // Calculate today's date in the user's timezone
         const now = new Date();
@@ -148,14 +177,15 @@ const checkOut = async (req, res) => {
             userId, 
             type: 'checkout', 
             notes, 
-            location, 
-            photo 
+            location: isRemoteMode ? 'Remote' : location, 
+            photo: isRemoteMode ? null : photo,
+            mode: isRemoteMode ? 'remote' : 'office'
         });
 
         // Log check-out activity
         await logActivity(userId, 'USER_CHECKOUT', {
-            action: 'checked_out',
-            location: location || 'Not specified',
+            action: isRemoteMode ? 'remote_checked_out' : 'checked_out',
+            location: isRemoteMode ? 'Remote' : (location || 'Not specified'),
             recordId: checkOut.id
         }, req);
         
