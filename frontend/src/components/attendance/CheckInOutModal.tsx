@@ -17,6 +17,8 @@ interface CheckInOutModalProps {
   title?: string;
   description?: string;
   showRemoteOption?: boolean;
+  // When true and type is 'checkout', allow skipping location (remote users)
+  isRemoteCheckoutMode?: boolean;
 }
 
 interface CheckInOutData {
@@ -38,9 +40,12 @@ export function CheckInOutModal({
   isLoading = false, 
   title,
   description,
-  showRemoteOption = false
+  showRemoteOption = false,
+  isRemoteCheckoutMode = false
 }: CheckInOutModalProps) {
   const [isRemoteWork, setIsRemoteWork] = useState(false);
+  // Checkout mode selection (office vs remote), defaults from isRemoteCheckoutMode
+  const [checkoutIsRemote, setCheckoutIsRemote] = useState<boolean>(isRemoteCheckoutMode);
   const [location, setLocation] = useState<CheckInOutData['location'] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -115,8 +120,8 @@ export function CheckInOutModal({
       }
     }
     
-    // For check-out, we always need location
-    if (type === 'checkout' && !location) {
+    // For check-out, require location only if NOT remote (based on toggle)
+    if (type === 'checkout' && !checkoutIsRemote && !location) {
       setLocationError('Please allow location access to continue');
       return;
     }
@@ -135,10 +140,13 @@ export function CheckInOutModal({
         notes: isRemoteWork && type === 'checkin' ? reason : notes,
         timestamp: new Date().toISOString(),
         type,
+        // For check-in remote request
         ...(isRemoteWork && type === 'checkin' && { 
           isRemote: true,
           reason 
-        })
+        }),
+        // For check-out, pass the chosen mode
+        ...(type === 'checkout' && { isRemote: checkoutIsRemote })
       };
       
       await onSubmit(data);
@@ -186,9 +194,16 @@ export function CheckInOutModal({
     };
   }, []);
 
+  // Keep checkout toggle in sync with prop on open
+  useEffect(() => {
+    if (isOpen) {
+      setCheckoutIsRemote(!!isRemoteCheckoutMode);
+    }
+  }, [isOpen, isRemoteCheckoutMode]);
+
   const isReadyToSubmit = 
     (type === 'checkin' && ((!isRemoteWork && location) || (isRemoteWork && reason.trim().length > 0))) ||
-    (type === 'checkout' && location);
+    (type === 'checkout' && (checkoutIsRemote || !!location));
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -219,6 +234,41 @@ export function CheckInOutModal({
         </DialogHeader>
 
         <div className="space-y-4">
+          {type === 'checkout' && (
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <Button
+                type="button"
+                variant={!checkoutIsRemote ? 'default' : 'outline'}
+                onClick={() => setCheckoutIsRemote(false)}
+                className="flex-1"
+                disabled={isLoading || isSubmitting}
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                Office Checkout
+              </Button>
+              <Button
+                type="button"
+                variant={checkoutIsRemote ? 'default' : 'outline'}
+                onClick={() => {
+                  if (!isRemoteCheckoutMode) {
+                    toast({
+                      title: 'Remote checkout not allowed',
+                      description: 'Today\'s attendance mode is Office. Location is required to check out.',
+                      variant: 'destructive'
+                    });
+                    setCheckoutIsRemote(false);
+                    return;
+                  }
+                  setCheckoutIsRemote(true);
+                }}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                disabled={isLoading || isSubmitting}
+              >
+                <Home className="w-4 h-4 mr-2" />
+                Remote Checkout
+              </Button>
+            </div>
+          )}
           {showRemoteOption && type === 'checkin' && (
             <div className="grid grid-cols-2 gap-2 mb-4">
               <Button
@@ -242,8 +292,10 @@ export function CheckInOutModal({
             </div>
           )}
 
-          {isRemoteWork ? (
-            <Card>
+          {/* Content for check-in vs checkout */}
+          {type === 'checkin' ? (
+            isRemoteWork ? (
+              <Card>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -261,9 +313,9 @@ export function CheckInOutModal({
                   />
                 </div>
               </CardContent>
-            </Card>
-          ) : (
-            <Card>
+              </Card>
+            ) : (
+              <Card>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -350,7 +402,117 @@ export function CheckInOutModal({
                   />
                 </div>
               </CardContent>
-            </Card>
+              </Card>
+            )
+          ) : (
+            // Checkout content
+            checkoutIsRemote ? (
+              <Card>
+                <CardContent className="p-4 space-y-4">
+                  <div className="space-y-2">
+                    <h4 className="font-medium flex items-center space-x-2 text-orange-500">
+                      <Home className="w-4 h-4" />
+                      <span>Remote Checkout Notes (Optional)</span>
+                    </h4>
+                    <textarea
+                      id="notes"
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder={'Add any notes about your check-out...'}
+                      className="w-full p-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-4 space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium flex items-center space-x-2 text-blue-500">
+                        <MapPin className="w-4 h-4" />
+                        <span>Office Location</span>
+                      </h4>
+                      {location && (
+                        <Badge variant="outline" className="text-status-excellent border-status-excellent">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Captured
+                        </Badge>
+                      )}
+                    </div>
+                    {!location && (
+                      <p className="text-sm text-muted-foreground">
+                        We need your location to record your attendance
+                      </p>
+                    )}
+                  </div>
+
+                  {!location ? (
+                    <Button 
+                      variant="outline" 
+                      onClick={getLocation}
+                      disabled={isGettingLocation}
+                      className="w-full"
+                    >
+                      {isGettingLocation ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Getting Location...
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-4 h-4 mr-2" />
+                          {'Get My Location'}
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-3 text-sm border rounded-lg bg-muted/10">
+                        <p className="font-medium">{location.address}</p>
+                        <p className="text-muted-foreground text-xs mt-1">
+                          Lat: {location.latitude.toFixed(6)}, Long: {location.longitude.toFixed(6)}
+                        </p>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={getLocation}
+                          disabled={isGettingLocation}
+                          className="mt-2 h-8 px-3 text-xs"
+                        >
+                          {isGettingLocation ? (
+                            <>
+                              <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                              Updating...
+                            </>
+                          ) : (
+                            'Update Location'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {locationError && (
+                    <p className="text-sm text-destructive mt-2">{locationError}</p>
+                  )}
+
+                  <div className="space-y-2">
+                    <label htmlFor="notes" className="text-sm font-medium">
+                      {'Check-out Notes (Optional)'}
+                    </label>
+                    <textarea
+                      id="notes"
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder={'Add any notes about your check-out...'}
+                      className="w-full p-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )
           )}
         </div>
 

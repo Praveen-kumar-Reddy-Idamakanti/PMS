@@ -53,6 +53,11 @@ export function QuickActionsCard({ status, isLoading, onCheckIn, onCheckOut }: P
             )}
             Check Out
           </Button>
+        ) : status === "pending_approval" ? (
+          <Button disabled className="w-full cursor-not-allowed opacity-70" variant="outline">
+            <Clock className="mr-2 h-4 w-4" />
+            Remote Request Pending
+          </Button>
         ) : (
           <Button onClick={onCheckIn} disabled={isLoading} className="w-full">
             {isLoading ? (

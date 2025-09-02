@@ -60,7 +60,8 @@ const checkIn = async (data: {
 }) => {
   try {
     const timestamp = new Date();
-    const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
+    // Keep timezoneOffset for remote request payload if backend uses it
+    const timezoneOffset = -timestamp.getTimezoneOffset() / 60;
     
     if (data.isRemote) {
       // For remote attendance, use the remote attendance endpoint
@@ -82,8 +83,12 @@ const checkIn = async (data: {
       });
       
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || 'Failed to create remote attendance request');
+        let serverMsg = 'Failed to create remote attendance request';
+        try {
+          const txt = await response.text();
+          serverMsg = (JSON.parse(txt).message) || txt || serverMsg;
+        } catch (_) {}
+        throw new Error(`(${response.status}) ${serverMsg}`);
       }
       
       const result = await response.json();
@@ -115,11 +120,9 @@ const checkIn = async (data: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...data,
-          type: 'checkin',
-          timestamp: timestamp.toISOString(),
-          mode: 'office',
-          timezoneOffset,
+          isRemote: false,
+          notes: data.notes,
+          photo: data.photo,
           location: {
             latitude: data.location.latitude,
             longitude: data.location.longitude,
@@ -129,8 +132,12 @@ const checkIn = async (data: {
       });
       
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || 'Failed to check in');
+        let serverMsg = 'Failed to check in';
+        try {
+          const txt = await response.text();
+          serverMsg = (JSON.parse(txt).message) || txt || serverMsg;
+        } catch (_) {}
+        throw new Error(`(${response.status}) ${serverMsg}`);
       }
       
       const result = await response.json();
@@ -160,8 +167,9 @@ const checkOut = async (data: {
     const timestamp = new Date();
     const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
     
-    if (!data.location) {
-      throw new Error('Location is required for check-out');
+    // Only require location for office checkout
+    if (!data.isRemote && !data.location) {
+      throw new Error('Location is required for office check-out');
     }
     
     const response = await fetchWithAuth('/attendance/checkout', {
@@ -170,22 +178,26 @@ const checkOut = async (data: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        ...data,
-        type: 'checkout',
-        timestamp: timestamp.toISOString(),
-        mode: data.isRemote ? 'remote' : 'office',
-        timezoneOffset,
-        location: {
-          latitude: data.location.latitude,
-          longitude: data.location.longitude,
-          address: data.location.address || 'Check-out location'
-        }
+        isRemote: !!data.isRemote,
+        notes: data.notes,
+        photo: undefined,
+        ...(data.location && {
+          location: {
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            address: data.location.address || 'Check-out location'
+          }
+        })
       }),
     });
     
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || 'Failed to check out');
+      let serverMsg = 'Failed to check out';
+      try {
+        const txt = await response.text();
+        serverMsg = (JSON.parse(txt).message) || txt || serverMsg;
+      } catch (_) {}
+      throw new Error(`(${response.status}) ${serverMsg}`);
     }
     
     const result = await response.json();
@@ -266,14 +278,30 @@ const getTodaysStatus = async () => {
         
         if (todayRequest) {
           // If we have a pending or approved remote request, it takes precedence
+          const isApproved = todayRequest.status === 'approved';
           attendanceStatus = {
             ...attendanceStatus,
-            status: todayRequest.status === 'approved' ? 'checked_in' : 'pending_approval',
-            isCheckedIn: todayRequest.status === 'approved',
-            needsCheckIn: todayRequest.status !== 'approved',
-            isRemote: true,
+            status: isApproved ? 'checked_in' : 'pending_approval',
+            isCheckedIn: isApproved,
+            needsCheckIn: !isApproved,
+            isRemote: isApproved,
             remoteRequest: todayRequest
           };
+
+          // If approved remote and no check-in record exists from regular endpoint,
+          // set a default check-in time of 10:00 AM local time today
+          if (isApproved && !attendanceStatus.checkInTime) {
+            const nowLocal = new Date();
+            const defaultCheckIn = new Date(nowLocal);
+            defaultCheckIn.setHours(10, 0, 0, 0); // 10:00 AM local
+            attendanceStatus.checkInTime = defaultCheckIn.toISOString();
+
+            // If not checked out, compute hours worked from 10:00 AM to now
+            if (!attendanceStatus.checkOutTime) {
+              const diffHrs = (nowLocal.getTime() - defaultCheckIn.getTime()) / (1000 * 60 * 60);
+              attendanceStatus.hoursWorked = Math.max(0, Number(diffHrs.toFixed(2)));
+            }
+          }
         }
       }
     } catch (error) {

@@ -122,14 +122,30 @@ export default function Dashboard() {
         });
         return;
       }
+      if (currentStatus.status === "checked_out") {
+        toast({
+          title: "Already Checked Out",
+          description: "You have already checked out today.",
+        });
+        return;
+      }
       const checkInData = {
         ...data,
-        type: "checkin",
-        timestamp: new Date().toISOString(),
         isRemote: !!data.isRemote,
-        mode: data.isRemote ? "remote" : "office",
       };
-      await attendanceService.checkIn(checkInData);
+      const res: any = await attendanceService.checkIn(checkInData);
+      const checkInTime = res?.data?.timestamp || res?.timestamp || new Date().toISOString();
+      // Optimistically update cache so UI reflects immediately
+      queryClient.setQueryData(["todayStatus"], (prev: any) => ({
+        ...(prev || {}),
+        status: "checked_in",
+        isCheckedIn: true,
+        needsCheckIn: false,
+        checkInTime,
+        // preserve checkout time if any
+        checkOutTime: prev?.checkOutTime || null,
+        isRemote: !!res?.isRemote,
+      }));
       await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
       toast({
         title: "Checked In",
@@ -137,12 +153,23 @@ export default function Dashboard() {
       });
       setIsCheckInModalOpen(false);
     } catch (error) {
-      toast({
-        title: "Check-in failed",
-        description:
-          error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = (error as any)?.response?.message || (error instanceof Error ? error.message : '');
+      if (msg && msg.toLowerCase().includes('already checked in')) {
+        // Sync UI and show friendly toast
+        await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
+        toast({ title: "Already Checked In", description: "You have already checked in today." });
+        setIsCheckInModalOpen(false);
+      } else if (msg && msg.toLowerCase().includes('already checked out')) {
+        await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
+        toast({ title: "Already Checked Out", description: "You have already checked out today." });
+        setIsCheckInModalOpen(false);
+      } else {
+        toast({
+          title: "Check-in failed",
+          description: error instanceof Error ? error.message : "Something went wrong",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -151,11 +178,35 @@ export default function Dashboard() {
   const handleCheckOut = async (data: CheckInOutData) => {
     setIsLoading(true);
     try {
-      await attendanceService.checkOut({
+      const currentStatus = await attendanceService.getTodaysStatus();
+      if (currentStatus.status === "checked_out") {
+        toast({
+          title: "Already Checked Out",
+          description: "You have already checked out today.",
+        });
+        return;
+      }
+      if (currentStatus.status !== "checked_in") {
+        toast({
+          title: "Not Checked In",
+          description: "You need to be checked in before checking out.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const res: any = await attendanceService.checkOut({
         ...data,
-        type: "checkout",
-        timestamp: new Date().toISOString(),
       });
+      const checkOutTime = res?.data?.timestamp || res?.timestamp || new Date().toISOString();
+      // Optimistic cache update
+      queryClient.setQueryData(["todayStatus"], (prev: any) => ({
+        ...(prev || {}),
+        status: "checked_out",
+        isCheckedIn: false,
+        needsCheckIn: true,
+        checkOutTime,
+        checkInTime: prev?.checkInTime || null,
+      }));
       await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
       toast({
         title: "Checked Out",
@@ -163,12 +214,21 @@ export default function Dashboard() {
       });
       setIsCheckOutModalOpen(false);
     } catch (error) {
-      toast({
-        title: "Check-out failed",
-        description:
-          error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
+      const msg = (error as any)?.response?.message || (error instanceof Error ? error.message : '');
+      if (msg && msg.toLowerCase().includes('already checked out')) {
+        await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
+        toast({ title: "Already Checked Out", description: "You have already checked out today." });
+        setIsCheckOutModalOpen(false);
+      } else if (msg && msg.toLowerCase().includes('not checked in')) {
+        await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
+        toast({ title: "Not Checked In", description: "You need to be checked in before checking out.", variant: "destructive" });
+      } else {
+        toast({
+          title: "Check-out failed",
+          description: error instanceof Error ? error.message : "Something went wrong",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -224,8 +284,28 @@ export default function Dashboard() {
           <QuickActionsCard
             status={todayStatus?.status || "not_checked_in"}
             isLoading={isLoading}
-            onCheckIn={() => setIsCheckInModalOpen(true)}
-            onCheckOut={() => setIsCheckOutModalOpen(true)}
+            onCheckIn={() => {
+              if (todayStatus?.status === "checked_out") {
+                toast({ title: "Already Checked Out", description: "You have already checked out today." });
+                return;
+              }
+              if (todayStatus?.status === "checked_in") {
+                toast({ title: "Already Checked In", description: "You have already checked in today." });
+                return;
+              }
+              setIsCheckInModalOpen(true);
+            }}
+            onCheckOut={() => {
+              if (todayStatus?.status === "checked_out") {
+                toast({ title: "Already Checked Out", description: "You have already checked out today." });
+                return;
+              }
+              if (todayStatus?.status !== "checked_in") {
+                toast({ title: "Not Checked In", description: "You need to be checked in before checking out.", variant: "destructive" });
+                return;
+              }
+              setIsCheckOutModalOpen(true);
+            }}
           />
 
         </div>
@@ -256,8 +336,9 @@ export default function Dashboard() {
         isOpen={isCheckOutModalOpen}
         onClose={() => !isLoading && setIsCheckOutModalOpen(false)}
         type="checkout"
-        onSubmit={(data) => handleCheckOut({ ...data, isRemote: !!todayStatus?.isRemote })}
+        onSubmit={handleCheckOut}
         isLoading={isLoading}
+        isRemoteCheckoutMode={!!todayStatus?.isRemote}
       />
     </div>
   );

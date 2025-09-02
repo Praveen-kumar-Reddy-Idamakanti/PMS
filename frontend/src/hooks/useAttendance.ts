@@ -97,10 +97,12 @@ export const useAttendance = () => {
   const fetchTodaysStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await attendanceService.getTodaysStatus();
+      // attendanceService.getTodaysStatus returns the full status object directly
+      const data = await attendanceService.getTodaysStatus();
       setState((prev) => ({
         ...prev,
-        todaysStatus: data.lastAction,
+        // Store the full status object so UI can access checkInTime/checkOutTime
+        todaysStatus: data,
       }));
       return data;
     } catch (error: any) {
@@ -138,15 +140,15 @@ export const useAttendance = () => {
   );
 
   const fetchAttendanceSummary = useCallback(
-    async (params: { startDate?: string; endDate?: string; userId?: number }) => {
+    async (params: { startDate: string; endDate: string; userId?: string }) => {
       setLoading(true);
       try {
-        const { data } = await attendanceService.getAttendanceSummary(params);
+        const summary = await attendanceService.getAttendanceSummary(params);
         setState((prev) => ({
           ...prev,
-          summary: data,
+          summary,
         }));
-        return data;
+        return summary;
       } catch (error: any) {
         setError(error.message || 'Failed to fetch attendance summary');
         throw error;

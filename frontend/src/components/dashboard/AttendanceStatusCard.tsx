@@ -1,6 +1,7 @@
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, LogIn, LogOut } from "lucide-react";
+import { format, parseISO } from "date-fns";
 
 export interface AttendanceStatusCardProps {
   status: "checked_in" | "checked_out" | "not_checked_in" | "pending_approval";
@@ -15,6 +16,15 @@ export function AttendanceStatusCard({
   checkInTime,
   checkOutTime,
 }: AttendanceStatusCardProps) {
+  const formatTime = (iso: string | null) => {
+    if (!iso) return "--:--";
+    try {
+      const d = parseISO(iso);
+      return format(d, "h:mm a");
+    } catch {
+      return "--:--";
+    }
+  };
   return (
     <Card className="shadow-medium hover:border-orange-500">
       <CardHeader>
@@ -58,13 +68,13 @@ export function AttendanceStatusCard({
           <span className="flex items-center text-sm font-medium">
             <LogIn className="w-4 h-4 mr-1 text-green-500" /> In:
           </span>
-          <span className="text-sm">{checkInTime || '--:--'}</span>
+          <span className="text-sm">{formatTime(checkInTime)}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center text-sm font-medium">
             <LogOut className="w-4 h-4 mr-1 text-red-500" /> Out:
           </span>
-          <span className="text-sm">{checkOutTime || '--:--'}</span>
+          <span className="text-sm">{formatTime(checkOutTime)}</span>
         </div>
       </CardContent>
     </Card>
