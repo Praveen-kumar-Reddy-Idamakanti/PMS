@@ -267,50 +267,72 @@ export default function Dashboard() {
         </div>
 
         {/* Main Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Attendance Status */}
-          {isLoadingStatus ? (
-            <div className="flex justify-center items-center h-40">
-              <p className="text-gray-500">Loading attendance...</p>
-            </div>
-          ) : (
-            <AttendanceStatusCard
-              status={todayStatus?.status || "not_checked_in"}
-              hoursWorked={todayStatus?.hoursWorked || 0}
-              checkInTime={todayStatus?.checkInTime || null}
-              checkOutTime={todayStatus?.checkOutTime || null}
-            />
-          )}
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 mb-8 items-stretch">
+  {/* left side ==> Attendance Status */}
+  <div className="lg:col-span-7 h-full">
+    {isLoadingStatus ? (
+      <div className="flex justify-center items-center h-40 h-full w-full">
+        <p className="text-gray-500">Loading attendance...</p>
+      </div>
+    ) : (
+      <AttendanceStatusCard
+        status={todayStatus?.checkOutTime ? 'checked_out' : (todayStatus?.status || "not_checked_in")}
+        hoursWorked={todayStatus?.hoursWorked || 0}
+        checkInTime={todayStatus?.checkInTime || null}
+        checkOutTime={todayStatus?.checkOutTime || null}
+        className="h-full"
+      />
+    )}
+  </div>
 
-          {/* Quick Actions */}
-          <QuickActionsCard
-            status={todayStatus?.checkOutTime ? 'checked_out' : (todayStatus?.status || "not_checked_in")}
-            isLoading={isLoading}
-            onCheckIn={() => {
-              if (todayStatus?.status === "checked_out") {
-                toast({ title: "Already Checked Out", description: "You have already checked out today." });
-                return;
-              }
-              if (todayStatus?.status === "checked_in") {
-                toast({ title: "Already Checked In", description: "You have already checked in today." });
-                return;
-              }
-              setIsCheckInModalOpen(true);
-            }}
-            onCheckOut={() => {
-              if (todayStatus?.status === "checked_out") {
-                toast({ title: "Already Checked Out", description: "You have already checked out today." });
-                return;
-              }
-              if (todayStatus?.status !== "checked_in") {
-                toast({ title: "Not Checked In", description: "You need to be checked in before checking out.", variant: "destructive" });
-                return;
-              }
-              setIsCheckOutModalOpen(true);
-            }}
-          />
+  {/* right side ==> Quick Actions */}
+  <div className="lg:col-span-3 h-full">
+    <QuickActionsCard
+      status={
+        todayStatus?.checkOutTime
+          ? "checked_out"
+          : todayStatus?.status || "not_checked_in"
+      }
+      isLoading={isLoading}
+      onCheckIn={() => {
+        if (todayStatus?.status === "checked_out") {
+          toast({
+            title: "Already Checked Out",
+            description: "You have already checked out today.",
+          });
+          return;
+        }
+        if (todayStatus?.status === "checked_in") {
+          toast({
+            title: "Already Checked In",
+            description: "You have already checked in today.",
+          });
+          return;
+        }
+        setIsCheckInModalOpen(true);
+      }}
+      onCheckOut={() => {
+        if (todayStatus?.status === "checked_out") {
+          toast({
+            title: "Already Checked Out",
+            description: "You have already checked out today.",
+          });
+          return;
+        }
+        if (todayStatus?.status !== "checked_in") {
+          toast({
+            title: "Not Checked In",
+            description: "You need to be checked in before checking out.",
+            variant: "destructive",
+          });
+          return;
+        }
+        setIsCheckOutModalOpen(true);
+      }}
+    />
+  </div>
+</div>
 
-        </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

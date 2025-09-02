@@ -15,7 +15,7 @@ export function QuickActionsCard({ status, isLoading, onCheckIn, onCheckOut }: P
   const navigate = useNavigate();
 
   return (
-    <Card className="shadow-medium hover:border-orange-500">
+    <Card className="shadow-medium hover:border-orange-500 h-full">
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Clock className="w-5 h-5 text-primary" />

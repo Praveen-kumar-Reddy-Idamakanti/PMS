@@ -8,6 +8,7 @@ export interface AttendanceStatusCardProps {
   hoursWorked: number;
   checkInTime: string | null;
   checkOutTime: string | null;
+  className?: string;
 }
 
 export function AttendanceStatusCard({
@@ -15,6 +16,7 @@ export function AttendanceStatusCard({
   hoursWorked,
   checkInTime,
   checkOutTime,
+  className,
 }: AttendanceStatusCardProps) {
   const formatTime = (iso: string | null) => {
     if (!iso) return "--:--";
@@ -26,7 +28,7 @@ export function AttendanceStatusCard({
     }
   };
   return (
-    <Card className="shadow-medium hover:border-orange-500">
+    <Card className={`shadow-medium hover:border-orange-500 h-full min-h-[320px] flex flex-col ${className || ""}`}>
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Clock className="w-5 h-5 text-primary" />
@@ -34,7 +36,7 @@ export function AttendanceStatusCard({
         </CardTitle>
         <CardDescription>Your daily attendance summary</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 flex-1">
         {/* Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Status:</span>
