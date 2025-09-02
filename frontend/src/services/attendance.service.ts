@@ -60,41 +60,38 @@ const checkIn = async (data: {
 }) => {
   try {
     const timestamp = new Date();
-    // Keep timezoneOffset for remote request payload if backend uses it
+    // User's timezone offset in hours
     const timezoneOffset = -timestamp.getTimezoneOffset() / 60;
     
     if (data.isRemote) {
-      // For remote attendance, use the remote attendance endpoint
+      // Remote attendance: create/submit a remote attendance request (approval workflow)
       const response = await fetchWithAuth('/remote-attendance/request', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          request_date: timestamp.toISOString().split('T')[0], // YYYY-MM-DD format
-          reason: data.reason || data.notes || 'Working remotely',
+          request_date: timestamp.toISOString().split('T')[0], // YYYY-MM-DD
+          reason: data.notes || 'Working remotely',
           timezoneOffset,
-          location: data.location ? {
-            latitude: data.location.latitude,
-            longitude: data.location.longitude,
-            address: data.location.address || 'Remote location'
-          } : null
+          ...(data.location && {
+            location: {
+              latitude: data.location.latitude,
+              longitude: data.location.longitude,
+              address: data.location.address || 'Remote location'
+            }
+          })
         }),
       });
       
       if (!response.ok) {
-        let serverMsg = 'Failed to create remote attendance request';
-        try {
-          const txt = await response.text();
-          serverMsg = (JSON.parse(txt).message) || txt || serverMsg;
-        } catch (_) {}
-        throw new Error(`(${response.status}) ${serverMsg}`);
+        const error = await response.json().catch(() => ({} as any));
+        throw new Error(error.message || 'Failed to create remote attendance request');
       }
       
       const result = await response.json();
-      
-      // If the remote request requires approval, return a specific status
-      if (result.status === 'pending_approval') {
+      // If backend signals pending approval, reflect that in UI; otherwise treat as checked-in remotely
+      if (result?.status === 'pending_approval') {
         return {
           ...result,
           status: 'pending_approval',
@@ -102,7 +99,6 @@ const checkIn = async (data: {
           isRemote: true
         };
       }
-      
       return {
         ...result,
         status: 'checked_in',
@@ -245,17 +241,18 @@ const getTodaysStatus = async () => {
       // Check regular attendance first
       const response = await fetchWithAuth(`/attendance/today?date=${today}&timezoneOffset=${timezoneOffset}`);
       if (response.ok) {
-        const data = await response.json();
-        if (data) {
+        const raw = await response.json();
+        const payload = raw?.data || raw; // controller wraps in {success, data}
+        if (payload) {
           attendanceStatus = {
             ...attendanceStatus,
-            status: data.status || 'not_checked_in',
-            isCheckedIn: data.status === 'checked_in',
-            needsCheckIn: data.status !== 'checked_in',
-            checkInTime: data.checkInTime || null,
-            checkOutTime: data.checkOutTime || null,
-            hoursWorked: data.hoursWorked || 0,
-            isRemote: data.isRemote || false
+            status: payload.status || 'not_checked_in',
+            isCheckedIn: payload.status === 'checked_in',
+            needsCheckIn: payload.status !== 'checked_in',
+            checkInTime: payload.checkInTime || null,
+            checkOutTime: payload.checkOutTime || null,
+            hoursWorked: payload.hoursWorked || 0,
+            isRemote: payload.isRemote || false
           };
         }
       }
@@ -264,41 +261,35 @@ const getTodaysStatus = async () => {
       // Continue with remote check if regular check fails
     }
 
-    // Check for remote attendance requests
+    // Check for remote attendance requests (approval workflow)
     try {
       const remoteResponse = await fetchWithAuth(`/remote-attendance/my-requests?startDate=${today}&endDate=${today}`);
       if (remoteResponse.ok) {
         const remoteRequests = await remoteResponse.json();
-        const todayRequest = Array.isArray(remoteRequests) 
-          ? remoteRequests.find((req: any) => 
-              req.request_date === today && 
-              (req.status === 'approved' || req.status === 'pending')
-            )
+        const todayRequest = Array.isArray(remoteRequests)
+          ? remoteRequests.find((req: any) => req.request_date === today && (req.status === 'approved' || req.status === 'pending'))
           : null;
-        
+
         if (todayRequest) {
-          // If we have a pending or approved remote request, it takes precedence
-          const isApproved = todayRequest.status === 'approved';
           attendanceStatus = {
             ...attendanceStatus,
-            status: isApproved ? 'checked_in' : 'pending_approval',
-            isCheckedIn: isApproved,
-            needsCheckIn: !isApproved,
-            isRemote: isApproved,
+            status: todayRequest.status === 'approved' ? 'checked_in' : 'pending_approval',
+            isCheckedIn: todayRequest.status === 'approved',
+            needsCheckIn: todayRequest.status !== 'approved',
+            isRemote: true,
             remoteRequest: todayRequest
           };
 
-          // If approved remote and no check-in record exists from regular endpoint,
-          // set a default check-in time of 10:00 AM local time today
-          if (isApproved && !attendanceStatus.checkInTime) {
+          // If approved but no actual check-in record exists, default to 10:00 AM local and compute hours
+          if (todayRequest.status === 'approved' && !attendanceStatus.checkInTime) {
             const nowLocal = new Date();
             const defaultCheckIn = new Date(nowLocal);
-            defaultCheckIn.setHours(10, 0, 0, 0); // 10:00 AM local
+            defaultCheckIn.setHours(10, 0, 0, 0); // 10:00 AM local time
             attendanceStatus.checkInTime = defaultCheckIn.toISOString();
 
-            // If not checked out, compute hours worked from 10:00 AM to now
             if (!attendanceStatus.checkOutTime) {
-              const diffHrs = (nowLocal.getTime() - defaultCheckIn.getTime()) / (1000 * 60 * 60);
+              const diffMs = nowLocal.getTime() - defaultCheckIn.getTime();
+              const diffHrs = diffMs / (1000 * 60 * 60);
               attendanceStatus.hoursWorked = Math.max(0, Number(diffHrs.toFixed(2)));
             }
           }
@@ -306,7 +297,7 @@ const getTodaysStatus = async () => {
       }
     } catch (error) {
       console.error('Error checking remote attendance status:', error);
-      // Continue with existing status if remote check fails
+      // Ignore and return whatever we have from /attendance/today
     }
 
     return attendanceStatus;

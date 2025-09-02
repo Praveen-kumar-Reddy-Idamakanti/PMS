@@ -41,7 +41,7 @@ const checkIn = async (req, res) => {
             });
         }
 
-        const { notes, location, photo } = req.body;
+        const { notes, location, photo, isRemote = false } = req.body;
         const userId = req.user.id;
 
         // Check if user already checked in today (considering timezone)
@@ -54,13 +54,22 @@ const checkIn = async (req, res) => {
             });
         }
 
-        // Create check-in record
+        // Validate location when office mode
+        if (!isRemote && !location) {
+            return res.status(400).json({
+                success: false,
+                message: 'Location is required for office check-ins'
+            });
+        }
+
+        // Create check-in record with mode derived from isRemote
         const checkInRecord = await Attendance.create({
             userId,
             type: 'checkin',
             notes,
             location,
-            photo
+            photo,
+            mode: isRemote ? 'remote' : 'office'
         });
 
         // Log check-in activity
