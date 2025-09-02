@@ -4,6 +4,7 @@ import { RemoteRequest } from '@/types/remoteRequest';
 export interface CreateRemoteRequestData {
   request_date: string;
   reason: string;
+  timezoneOffset?: number;
 }
 
 export interface GetRequestsParams {
@@ -13,6 +14,14 @@ export interface GetRequestsParams {
 }
 
 class RemoteAttendanceService {
+  private async handleResponse<T>(response: Response): Promise<T> {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Request failed');
+    }
+    return response.json();
+  }
+
   /**
    * Get user's remote attendance requests
    */
@@ -34,13 +43,7 @@ class RemoteAttendanceService {
       const url = `/remote-attendance/my-requests${queryString ? `?${queryString}` : ''}`;
       
       const response = await fetchWithAuth(url);
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to fetch requests');
-      }
-      
-      return await response.json();
+      return this.handleResponse<RemoteRequest[]>(response);
     } catch (error) {
       console.error('Error fetching remote attendance requests:', error);
       throw error;
@@ -50,19 +53,21 @@ class RemoteAttendanceService {
   /**
    * Create a new remote attendance request
    */
-  async createRequest(data: CreateRemoteRequestData): Promise<void> {
+  async createRequest(data: CreateRemoteRequestData): Promise<RemoteRequest> {
     try {
       const response = await fetchWithAuth('/remote-attendance/request', {
         method: 'POST',
-        body: JSON.stringify(data),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          request_date: data.request_date,
+          reason: data.reason,
+          timezoneOffset: data.timezoneOffset
+        }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create request');
-      }
-
-      return await response.json();
+      return this.handleResponse<RemoteRequest>(response);
     } catch (error) {
       console.error('Error creating remote attendance request:', error);
       throw error;

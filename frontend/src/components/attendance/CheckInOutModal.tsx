@@ -95,20 +95,29 @@ export function CheckInOutModal({
     onClose();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isRemoteWork && !location) {
-      setLocationError('Please allow location access to continue');
-      return;
-    }
+    // For check-in, we need either location or remote work with a reason
+    if (type === 'checkin') {
+      if (!isRemoteWork && !location) {
+        setLocationError('Please allow location access to continue');
+        return;
+      }
 
-    if (isRemoteWork && !reason.trim()) {
-      toast({
-        title: 'Reason Required',
-        description: 'Please provide a reason for working remotely',
-        variant: 'destructive'
-      });
+      if (isRemoteWork && !reason.trim()) {
+        toast({
+          title: 'Reason Required',
+          description: 'Please provide a reason for working remotely',
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
+    
+    // For check-out, we always need location
+    if (type === 'checkout' && !location) {
+      setLocationError('Please allow location access to continue');
       return;
     }
 
@@ -116,29 +125,45 @@ export function CheckInOutModal({
     
     try {
       const data: CheckInOutData & { isRemote?: boolean; reason?: string } = {
-        ...(location && { location }),
-        notes: isRemoteWork ? reason : notes,
+        ...(location && { 
+          location: {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            address: location.address
+          } 
+        }),
+        notes: isRemoteWork && type === 'checkin' ? reason : notes,
         timestamp: new Date().toISOString(),
-        type: 'checkin',
-        isRemote: isRemoteWork,
-        ...(isRemoteWork && { reason })
+        type,
+        ...(isRemoteWork && type === 'checkin' && { 
+          isRemote: true,
+          reason 
+        })
       };
       
-      onSubmit(data);
+      await onSubmit(data);
+      
+      const successMessage = type === 'checkin' 
+        ? isRemoteWork 
+          ? 'Your remote work request has been submitted for approval.'
+          : 'Welcome! Your office check-in has been recorded.'
+        : 'Goodbye! Your check-out has been recorded.';
       
       toast({
         title: `Successfully ${type === 'checkin' ? 'checked in' : 'checked out'}`,
-        description: type === 'checkin' 
-          ? 'Welcome! Your check-in has been recorded.' 
-          : 'Goodbye! Your check-out has been recorded.',
+        description: successMessage,
       });
       
       handleClose();
     } catch (error) {
       console.error(`Error during ${type}:`, error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred';
+      
       toast({
         title: `Error during ${type === 'checkin' ? 'check-in' : 'check-out'}`,
-        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -161,8 +186,8 @@ export function CheckInOutModal({
     };
   }, []);
 
-  const isReadyToSubmit = (location && type !== 'checkin') || 
-    (isRemoteWork && reason.trim().length > 0) || 
+  const isReadyToSubmit = 
+    (type === 'checkin' && ((!isRemoteWork && location) || (isRemoteWork && reason.trim().length > 0))) ||
     (type === 'checkout' && location);
 
   return (

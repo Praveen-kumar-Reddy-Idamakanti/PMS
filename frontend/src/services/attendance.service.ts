@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { fetchWithAuth } from '@/lib/api';
 import { API_BASE_URL } from '../config';
 import { debug, debugApi } from '../utils/debug';
 
@@ -55,21 +56,93 @@ const checkIn = async (data: {
   };
   photo?: string; // Base64 encoded image
   isRemote?: boolean;
+  reason?: string; // For remote attendance
 }) => {
   try {
     const timestamp = new Date();
     const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
     
-    const response = await api.post('/attendance/checkin', {
-      ...data,
-      type: 'checkin',
-      timestamp: timestamp.toISOString(),
-      mode: data.isRemote ? 'remote' : 'office',
-      timezoneOffset
-    });
-    return response.data;
+    if (data.isRemote) {
+      // For remote attendance, use the remote attendance endpoint
+      const response = await fetchWithAuth('/remote-attendance/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          request_date: timestamp.toISOString().split('T')[0], // YYYY-MM-DD format
+          reason: data.reason || data.notes || 'Working remotely',
+          timezoneOffset,
+          location: data.location ? {
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            address: data.location.address || 'Remote location'
+          } : null
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to create remote attendance request');
+      }
+      
+      const result = await response.json();
+      
+      // If the remote request requires approval, return a specific status
+      if (result.status === 'pending_approval') {
+        return {
+          ...result,
+          status: 'pending_approval',
+          message: result.message || 'Your remote work request has been submitted for approval.',
+          isRemote: true
+        };
+      }
+      
+      return {
+        ...result,
+        status: 'checked_in',
+        isRemote: true
+      };
+    } else {
+      // For regular office check-in
+      if (!data.location) {
+        throw new Error('Location is required for office check-in');
+      }
+      
+      const response = await fetchWithAuth('/attendance/checkin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...data,
+          type: 'checkin',
+          timestamp: timestamp.toISOString(),
+          mode: 'office',
+          timezoneOffset,
+          location: {
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            address: data.location.address || 'Office location'
+          }
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to check in');
+      }
+      
+      const result = await response.json();
+      return {
+        ...result,
+        status: 'checked_in',
+        isRemote: false
+      };
+    }
   } catch (error: any) {
-    throw error.response?.data || { message: 'Error checking in' };
+    console.error('Check-in error:', error);
+    throw new Error(error.message || 'Error checking in');
   }
 };
 
@@ -79,7 +152,7 @@ const checkOut = async (data: {
   location?: {
     latitude: number;
     longitude: number;
-    address: string;
+    address?: string;
   };
   isRemote?: boolean;
 }) => {
@@ -87,16 +160,43 @@ const checkOut = async (data: {
     const timestamp = new Date();
     const timezoneOffset = -timestamp.getTimezoneOffset() / 60; // Convert minutes to hours
     
-    const response = await api.post('/attendance/checkout', {
-      ...data,
-      type: 'checkout',
-      timestamp: timestamp.toISOString(),
-      mode: data.isRemote ? 'remote' : 'office',
-      timezoneOffset
+    if (!data.location) {
+      throw new Error('Location is required for check-out');
+    }
+    
+    const response = await fetchWithAuth('/attendance/checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ...data,
+        type: 'checkout',
+        timestamp: timestamp.toISOString(),
+        mode: data.isRemote ? 'remote' : 'office',
+        timezoneOffset,
+        location: {
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          address: data.location.address || 'Check-out location'
+        }
+      }),
     });
-    return response.data;
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Failed to check out');
+    }
+    
+    const result = await response.json();
+    return {
+      ...result,
+      status: 'checked_out',
+      checkOutTime: timestamp.toISOString()
+    };
   } catch (error: any) {
-    throw error.response?.data || { message: 'Error checking out' };
+    console.error('Check-out error:', error);
+    throw new Error(error.message || 'Error checking out');
   }
 };
 
@@ -116,35 +216,72 @@ const getTodaysStatus = async () => {
     
     // Get today's date in local timezone
     const today = formatLocalDate(new Date());
-    const response = await api.get(`/attendance/today?date=${today}&timezoneOffset=${timezoneOffset}`);
     
-    // Handle case where data is nested under data property
-    const responseData = response.data?.data || response.data;
-    
-    // Handle case where status is 'checked_out' but checkInTime exists
-    const status = responseData.status || 'not_checked_in';
-    const isCheckedIn = status === 'checked_in';
-    const isCheckedOut = status === 'checked_out';
-    
-    // Transform the response to match our expected format
-    // In attendance.service.ts, update the getTodaysStatus function:
-const result = {
-  status,
-  isCheckedIn,
-  needsCheckIn: !isCheckedIn && !isCheckedOut,
-  checkInTime: responseData.checkInTime || null,
-  checkOutTime: responseData.checkOutTime || null,
-  hoursWorked: responseData.hoursWorked || 0,
-  lastAction: responseData.lastAction ? {
-    ...responseData.lastAction,
-    // Normalize isRemote to mode
-    mode: responseData.lastAction.mode || 
-          (responseData.lastAction.isRemote ? 'remote' : 'office')
-  } : null
-};
-    
-    console.log('Processed status:', result); // Debug log
-    return result;
+    // First, check regular attendance status
+    let attendanceStatus = {
+      status: 'not_checked_in',
+      isCheckedIn: false,
+      needsCheckIn: true,
+      checkInTime: null,
+      checkOutTime: null,
+      hoursWorked: 0,
+      isRemote: false,
+      remoteRequest: null
+    };
+
+    try {
+      // Check regular attendance first
+      const response = await fetchWithAuth(`/attendance/today?date=${today}&timezoneOffset=${timezoneOffset}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data) {
+          attendanceStatus = {
+            ...attendanceStatus,
+            status: data.status || 'not_checked_in',
+            isCheckedIn: data.status === 'checked_in',
+            needsCheckIn: data.status !== 'checked_in',
+            checkInTime: data.checkInTime || null,
+            checkOutTime: data.checkOutTime || null,
+            hoursWorked: data.hoursWorked || 0,
+            isRemote: data.isRemote || false
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error checking regular attendance status:', error);
+      // Continue with remote check if regular check fails
+    }
+
+    // Check for remote attendance requests
+    try {
+      const remoteResponse = await fetchWithAuth(`/remote-attendance/my-requests?startDate=${today}&endDate=${today}`);
+      if (remoteResponse.ok) {
+        const remoteRequests = await remoteResponse.json();
+        const todayRequest = Array.isArray(remoteRequests) 
+          ? remoteRequests.find((req: any) => 
+              req.request_date === today && 
+              (req.status === 'approved' || req.status === 'pending')
+            )
+          : null;
+        
+        if (todayRequest) {
+          // If we have a pending or approved remote request, it takes precedence
+          attendanceStatus = {
+            ...attendanceStatus,
+            status: todayRequest.status === 'approved' ? 'checked_in' : 'pending_approval',
+            isCheckedIn: todayRequest.status === 'approved',
+            needsCheckIn: todayRequest.status !== 'approved',
+            isRemote: true,
+            remoteRequest: todayRequest
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error checking remote attendance status:', error);
+      // Continue with existing status if remote check fails
+    }
+
+    return attendanceStatus;
   } catch (error: any) {
     console.error('Error in getTodaysStatus:', error);
     // Return default status on error
