@@ -135,16 +135,17 @@ export default function Dashboard() {
       };
       const res: any = await attendanceService.checkIn(checkInData);
       const checkInTime = res?.data?.timestamp || res?.timestamp || new Date().toISOString();
+      const nextStatus = res?.status === 'pending_approval' ? 'pending_approval' : 'checked_in';
       // Optimistically update cache so UI reflects immediately
       queryClient.setQueryData(["todayStatus"], (prev: any) => ({
         ...(prev || {}),
-        status: "checked_in",
-        isCheckedIn: true,
-        needsCheckIn: false,
+        status: nextStatus,
+        isCheckedIn: nextStatus === 'checked_in',
+        needsCheckIn: nextStatus !== 'checked_in',
         checkInTime,
         // preserve checkout time if any
         checkOutTime: prev?.checkOutTime || null,
-        isRemote: !!res?.isRemote,
+        isRemote: !!res?.isRemote || !!prev?.isRemote,
       }));
       await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
       toast({
@@ -198,14 +199,15 @@ export default function Dashboard() {
         ...data,
       });
       const checkOutTime = res?.data?.timestamp || res?.timestamp || new Date().toISOString();
-      // Optimistic cache update
+      // Optimistic cache update (already checked out)
       queryClient.setQueryData(["todayStatus"], (prev: any) => ({
         ...(prev || {}),
         status: "checked_out",
         isCheckedIn: false,
-        needsCheckIn: true,
+        needsCheckIn: false,
         checkOutTime,
         checkInTime: prev?.checkInTime || null,
+        isRemote: prev?.isRemote ?? !!res?.isRemote,
       }));
       await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
       toast({
@@ -282,7 +284,7 @@ export default function Dashboard() {
 
           {/* Quick Actions */}
           <QuickActionsCard
-            status={todayStatus?.status || "not_checked_in"}
+            status={todayStatus?.checkOutTime ? 'checked_out' : (todayStatus?.status || "not_checked_in")}
             isLoading={isLoading}
             onCheckIn={() => {
               if (todayStatus?.status === "checked_out") {

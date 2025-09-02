@@ -200,6 +200,9 @@ const checkOut = async (data: {
     return {
       ...result,
       status: 'checked_out',
+      isCheckedIn: false,
+      needsCheckIn: false,
+      isRemote: !!data.isRemote,
       checkOutTime: timestamp.toISOString()
     };
   } catch (error: any) {
@@ -244,15 +247,25 @@ const getTodaysStatus = async () => {
         const raw = await response.json();
         const payload = raw?.data || raw; // controller wraps in {success, data}
         if (payload) {
+          // Normalize field names from backend (camelCase or snake_case)
+          const checkInTime = payload.checkInTime || payload.checkin_time || null;
+          const checkOutTime = payload.checkOutTime || payload.checkout_time || null;
+          const hoursWorked = payload.hoursWorked ?? payload.total_hours ?? 0;
+          const isRemote = payload.isRemote ?? payload.is_remote ?? (payload.mode === 'remote') ?? false;
+          const derivedStatus = checkOutTime
+            ? 'checked_out'
+            : checkInTime
+            ? 'checked_in'
+            : payload.status || 'not_checked_in';
           attendanceStatus = {
             ...attendanceStatus,
-            status: payload.status || 'not_checked_in',
-            isCheckedIn: payload.status === 'checked_in',
-            needsCheckIn: payload.status !== 'checked_in',
-            checkInTime: payload.checkInTime || null,
-            checkOutTime: payload.checkOutTime || null,
-            hoursWorked: payload.hoursWorked || 0,
-            isRemote: payload.isRemote || false
+            status: derivedStatus,
+            isCheckedIn: derivedStatus === 'checked_in',
+            needsCheckIn: derivedStatus !== 'checked_in',
+            checkInTime,
+            checkOutTime,
+            hoursWorked: Number(hoursWorked) || 0,
+            isRemote: !!isRemote
           };
         }
       }
