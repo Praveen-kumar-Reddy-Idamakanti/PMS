@@ -79,12 +79,10 @@ const connectDB = () => {
  * @throws {Error} If the database is not connected
  */
 const getDB = () => {
-    console.log('Getting database instance...');
     if (!dbInstance) {
         console.error('Database not connected. Call connectDB() first.');
         throw new Error('Database not connected. Call connectDB() first.');
     }
-    console.log('Database instance retrieved successfully');
     return dbInstance;
 };
 

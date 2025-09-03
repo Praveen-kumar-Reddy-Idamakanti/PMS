@@ -112,12 +112,12 @@ const setupRoutes = async () => {
       console.log('Mounting routes...');
       
       // Mount remote attendance routes first to ensure they're registered
-      console.log('Mounting /api/remote-attendance...');
+      //console.log('Mounting /api/remote-attendance...');
       //remote attendance routes
       app.use('/api/remote-attendance', remoteAttendanceRoutes);
       
       // Mount other routes
-      console.log('Mounting other routes...');
+      //console.log('Mounting other routes...');
       //auth routes
       app.use('/api/auth', authRoutes);
       //attendance routes
@@ -131,27 +131,27 @@ const setupRoutes = async () => {
       app.use('/api/leave-types', leaveTypesRoutes);
       app.use('/api/leave-balances', leaveBalancesRoutes);
       app.use('/api/leave-requests', leaveRequestsRoutes);
-      console.log('All routes mounted successfully');
+      //console.log('All routes mounted successfully');
       
       
       
       // Debug: Log all registered routes
-      console.log('\n=== Registered Routes ===');
+      //console.log('\n=== Registered Routes ===');
       app._router.stack.forEach((middleware) => {
         if (middleware.route) {
           // Routes registered directly on the app
-          console.log(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
+          //console.log(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
         } else if (middleware.name === 'router') {
           // Routes registered with Router()
           middleware.handle.stack.forEach((handler) => {
             if (handler.route) {
               const methods = Object.keys(handler.route.methods).join(', ').toUpperCase();
-              console.log(`${methods} ${handler.route.path}`);
+              //console.log(`${methods} ${handler.route.path}`);
             }
           });
         }
       });
-      console.log('=========================\n');
+      //console.log('=========================\n');
       
       logger.info('✅ Routes initialized successfully');
     } catch (routeError) {

@@ -12,7 +12,7 @@
 // Controllers assume req.user is set by auth middleware.
 
 const LeaveType = require("../models/leaves/LeaveType");
-const LeaveBalance = require("../models/leaves/LeaveBalance");
+const LeaveBalance = require("../models/leaves/leaveBalance"); 
 const LeaveRequest = require("../models/leaves/leaveRequest");
 const db = require("../config/db"); // optional if you need transactions
 
@@ -111,7 +111,7 @@ exports.requestLeave = async (req, res) => {
    * validation and business rules:
    * - check type exists
    * - check overlapping requests
-   * - for some leaves you may aut0-approve (not implemented)
+   * - check casual leave eligibility (only one per month)
    * - default status: pending
    */
   try {
@@ -130,6 +130,51 @@ exports.requestLeave = async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid dates" });
     }
 
+    // Get leave type to check if it's casual leave
+    const leaveType = await LeaveType.getById(typeId);
+    if (!leaveType) {
+      return res.status(400).json({ success: false, error: "Invalid leave type" });
+    }
+
+    // Check for casual leave restriction at submission time
+    if (leaveType.name.toLowerCase() === 'casual_leave') {
+      const year = s.getFullYear();
+      const month = s.getMonth() + 1;
+      
+      console.log('Checking casual leave restriction for user:', userId, 'year:', year, 'month:', month);
+      
+      // Check for existing approved or pending casual leaves in the same month
+      const existingCasualLeaves = await LeaveRequest.getAll({
+        userId,
+        leaveTypeId: typeId,
+        status: ['approved', 'pending'], // Check both approved and pending
+        year,
+        month
+      });
+
+      console.log('Found existing casual leaves:', existingCasualLeaves);
+
+      if (existingCasualLeaves && existingCasualLeaves.length > 0) {
+        // Filter out the current request if it exists (for updates)
+        const otherLeaves = existingCasualLeaves.filter(leave => 
+          !req.body.id || leave.id.toString() !== req.body.id.toString()
+        );
+        
+        console.log('Other casual leaves after filtering:', otherLeaves);
+        
+        if (otherLeaves.length > 0) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'You have already used your casual leave for this month',
+            details: {
+              existingLeaves: otherLeaves,
+              currentRequest: req.body
+            }
+          });
+        }
+      }
+    }
+
     // Optionally compute days if not provided
     const requestedDays = days ? Number(days) : Math.ceil((e - s) / (1000 * 60 * 60 * 24)) + 1;
 
@@ -137,6 +182,16 @@ exports.requestLeave = async (req, res) => {
     const overlapping = await LeaveRequest.getOverlapping(userId, startDate, endDate);
     if (overlapping && overlapping.length) {
       return res.status(409).json({ success: false, error: "Overlapping leave request exists" });
+    }
+
+    // Check leave balance
+    const year = s.getFullYear();
+    const balance = await LeaveBalance.get(userId, typeId, year);
+    if ((balance?.balance || 0) < requestedDays) {
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient leave balance'
+      });
     }
 
     const payload = {
@@ -152,10 +207,8 @@ exports.requestLeave = async (req, res) => {
     };
 
     const created = await LeaveRequest.create(payload);
-
-    // Optionally: if leave type is auto-approve you can call approve flow here.
-
     return res.status(201).json({ success: true, data: created });
+
   } catch (err) {
     console.error("requestLeave:", err);
     return res.status(500).json({ success: false, error: err.message || "Server error" });
@@ -199,43 +252,103 @@ exports.approveLeave = async (req, res) => {
   try {
     const approverId = req.user && req.user.id;
     const { id } = req.params;
-    const request = await LeaveRequest.getById(id);
-    if (!request) return res.status(404).json({ success: false, error: "Not found" });
-    if (request.status !== "pending") return res.status(400).json({ success: false, error: "Only pending requests can be approved" });
+    const { notes = '' } = req.body;
 
-    // Load leave type and balance
-    const typeId = request.type_id;
-    const userId = request.user_id;
-    const year = new Date(request.start_date).getFullYear();
-
-    // Start a DB transaction if your model supports it
-    // Here we assume model methods are atomic or use db transaction wrapper. Example using db.serialize/db.run not shown.
-
-    // get current balance row
-    const lb = await LeaveBalance.get(userId, typeId, year);
-    const currentBalance = (lb && lb.balance) || 0;
-    const required = request.days || 0;
-
-    if (required > currentBalance) {
-      // Not enough balance
-      return res.status(400).json({ success: false, error: "Insufficient leave balance" });
+    // Get the leave request
+    const leaveRequest = await LeaveRequest.getById(id);
+    if (!leaveRequest) {
+      return res.status(404).json({ success: false, error: 'Leave request not found' });
     }
 
-    // Deduct
-    const newBalance = currentBalance - required;
-    await LeaveBalance.upsert(userId, typeId, year, newBalance);
+    if (leaveRequest.status !== 'pending') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Only pending requests can be approved' 
+      });
+    }
 
-    // Update request
-    const meta = {
+    // Get leave type
+    const leaveType = await LeaveType.getById(leaveRequest.leave_type_id);
+    if (!leaveType) {
+      return res.status(400).json({ success: false, error: 'Invalid leave type' });
+    }
+
+    // Check for casual leave restriction
+    if (leaveType.name.toLowerCase() === 'casual') {
+      const startDate = new Date(leaveRequest.start_date);
+      const year = startDate.getFullYear();
+      const month = startDate.getMonth() + 1;
+      
+      // Check for existing approved casual leaves in the same month
+      const existingCasualLeaves = await LeaveRequest.getAll({
+        userId: leaveRequest.user_id,
+        status: 'approved',
+        leaveTypeId: leaveType.id,
+        year,
+        month
+      });
+
+      // Exclude current request from the count
+      const otherApprovedLeaves = existingCasualLeaves.filter(
+        lr => lr.id !== leaveRequest.id
+      );
+
+      if (otherApprovedLeaves.length > 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Only one casual leave is allowed per month' 
+        });
+      }
+    }
+
+    // Check leave balance
+    const year = new Date(leaveRequest.start_date).getFullYear();
+    const balance = await LeaveBalance.get(
+      leaveRequest.user_id,
+      leaveRequest.leave_type_id,
+      year
+    );
+
+    const days = Math.ceil(
+      (new Date(leaveRequest.end_date) - new Date(leaveRequest.start_date)) / 
+      (1000 * 60 * 60 * 24)
+    ) + 1;
+
+    if ((balance?.balance || 0) < days) {
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient leave balance'
+      });
+    }
+
+    // Start a DB transaction if your model supports it
+    // Here we assume model methods are atomic or use db transaction wrapper.
+    
+    // Update leave balance
+    const newBalance = (balance?.balance || 0) - days;
+    await LeaveBalance.upsert(
+      leaveRequest.user_id,
+      leaveRequest.leave_type_id,
+      year,
+      newBalance
+    );
+
+    // Update leave request status
+    const result = await LeaveRequest.updateStatus(id, 'approved', {
       approved_by: approverId,
       approved_at: new Date().toISOString(),
-    };
-    await LeaveRequest.updateStatus(id, "approved", meta);
+      notes,
+      days
+    });
 
-    return res.json({ success: true, message: "Leave approved" });
+    return res.json({ success: true, data: result });
+
   } catch (err) {
-    console.error("approveLeave:", err);
-    return res.status(500).json({ success: false, error: err.message || "Server error" });
+    console.error('approveLeave error:', err);
+    return res.status(500).json({ 
+      success: false, 
+      error: err.message || 'Failed to approve leave request' 
+    });
   }
 };
 
