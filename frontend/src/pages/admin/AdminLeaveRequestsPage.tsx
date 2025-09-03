@@ -67,17 +67,32 @@ const safeFormatDate = (dateString: string | Date, formatStr: string) => {
   }
 };
 
-interface LeaveRequestWithUser extends Omit<LeaveRequest, 'start_date' | 'end_date' | 'created_at' | 'updated_at'> {
+interface LeaveRequestWithUser {
+  // Base fields
+  id: number;
+  userId: number;
+  leaveTypeId: number;
+  reason: string;
+  status: string;
+  days: number;
+  name: string;
+  email: string;
+  
+  // Date fields
   startDate: Date;
   endDate: Date;
   createdAt: Date;
   updatedAt?: Date;
-  days: number;
-  // These are already in LeaveRequest but we need to ensure they're required
+  
+  // User info
   userName: string;
-  employeeId: string | null;
   userEmail: string;
+  employeeId: string | null;
+  
+  // Leave type info
   leaveTypeName: string;
+  
+  // Approval info
   approvedByUserId?: string | null;
   approvedByUserName?: string | null;
 }
@@ -176,40 +191,33 @@ export const AdminLeaveRequestsPage: React.FC = () => {
         });
           try {
             // Map the response to match LeaveRequestWithUser interface
-            const leaveRequest: LeaveRequestWithUser = {
-              // Base LeaveRequest fields
+            const mappedRequest: LeaveRequestWithUser = {
+              // Base fields
               id: request.id,
-              user_id: request.user_id,
-              leave_type_id: request.leave_type_id,
-              start_date: request.start_date,
-              end_date: request.end_date,
+              userId: request.userId,
+              leaveTypeId: request.leaveTypeId,
               reason: request.reason || '',
               status: parseStatus(request.status),
-              created_at: request.created_at,
-              updated_at: request.updated_at || undefined,
-              approved_by: request.approved_by || undefined,
               days: request.days || 0,
-              // Extended fields
-              user_name: request.user_name || request.name || 'Unknown User',
-              user_email: request.user_email || request.email || '',
-              employee_id: request.employee_id || null,
-              leave_type_name: request.leave_type_name || 'Unknown Type',
-              approved_by_user_name: request.approved_by_user_name || null,
-              name: request.user_name || request.name || 'Unknown User',
-              email: request.user_email || request.email || '',
-              employeeId: request.employee_id || null,
-              // LeaveRequestWithUser fields
-              startDate: new Date(request.start_date),
-              endDate: new Date(request.end_date),
-              createdAt: new Date(request.created_at),
-              updatedAt: request.updated_at ? new Date(request.updated_at) : undefined,
-              // Mapped fields for display
-              userName: request.user_name || request.name || 'Unknown User',
-              userEmail: request.user_email || request.email || '',
-              leaveTypeName: request.leave_type_name || 'Unknown Type',
-              approvedByUserId: request.approved_by?.toString() || null,
-              approvedByUserName: request.approved_by_user_name || null,
-            } as LeaveRequestWithUser;
+              name: request.userName || 'Unknown User',
+              email: request.userEmail || '',
+              // Date fields
+              startDate: new Date(request.startDate),
+              endDate: new Date(request.endDate),
+              createdAt: new Date(request.createdAt),
+              updatedAt: request.updatedAt ? new Date(request.updatedAt) : undefined,
+              // User info
+              userName: request.userName || 'Unknown User',
+              userEmail: request.userEmail || '',
+              employeeId: request.employeeId || null,
+              // Leave type info
+              leaveTypeName: request.leaveTypeName || 'Unknown Type',
+              // Approval info
+              approvedByUserId: request.approvedByUserId?.toString() || null,
+              approvedByUserName: request.approvedByUserName || null,
+            };
+            
+            return mappedRequest;
           } catch (error) {
             console.error('Error processing leave request:', error, request);
             return null;
