@@ -6,15 +6,25 @@ const { connectDB, getDB } = require('./config/db');
 const { initDatabase } = require('./config/initDb');
 const logger = require('./utils/logger');
 const requestLogger = require('./middleware/requestLogger');
+const cron = require('node-cron');
+const { runMonthlyAccruals, runYearlyInitAndCarryForward } = require('./jobs/accruals');
 
 // Import routes
+//auth routes
 const authRoutes = require('./routes/auth.routes');
+//attendance routes
 const attendanceRoutes = require('./routes/attendance.routes');
-const adminRoutes = require('./routes/admin.routes');
-const activityLogsRoutes = require('./routes/activityLogs.routes');
-const adminSettingsRoutes = require('./routes/adminSettings.routes');
+//admin routes
+const adminRoutes = require('./routes/adminroutes/admin.routes');
+const activityLogsRoutes = require('./routes/adminroutes/activityLogs.routes');
+const adminSettingsRoutes = require('./routes/adminroutes/adminSettings.routes');
+const adminRemoteAttendanceRoutes = require('./routes/adminroutes/adminRemoteAttendanceRoutes');
+//remote attendance routes
 const remoteAttendanceRoutes = require('./routes/remoteAttendanceRoutes');
-const adminRemoteAttendanceRoutes = require('./routes/adminRemoteAttendanceRoutes');
+//leave types routes
+const leaveTypesRoutes = require('./routes/leaveroutes/leaveTypes');
+const leaveBalancesRoutes = require('./routes/leaveroutes/leaveBalances');
+const leaveRequestsRoutes = require('./routes/leaveroutes/leaveRequests');
 
 const app = express();
 
@@ -23,9 +33,6 @@ const corsOptions = {
   origin: [
     'http://localhost:8080', 
     'http://127.0.0.1:8080',
-    'http://localhost:5173', // Vite default dev port
-    'http://127.0.0.1:5173',
-    
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
@@ -90,6 +97,15 @@ const setupRoutes = async () => {
       throw new Error(`Database initialization failed: ${initError.message}`);
     }
     
+    cron.schedule('5 0 1 * *', () => {
+      runMonthlyAccruals().catch(console.error);
+    });
+    
+    // Run yearly (carry forward) on Jan 1st at 00:10
+    cron.schedule('10 0 1 1 *', () => {
+      runYearlyInitAndCarryForward().catch(console.error);
+    });
+
     // API Routes
     logger.info('🔄 Setting up API routes...');
     try {
@@ -97,23 +113,27 @@ const setupRoutes = async () => {
       
       // Mount remote attendance routes first to ensure they're registered
       console.log('Mounting /api/remote-attendance...');
+      //remote attendance routes
       app.use('/api/remote-attendance', remoteAttendanceRoutes);
       
       // Mount other routes
       console.log('Mounting other routes...');
+      //auth routes
       app.use('/api/auth', authRoutes);
+      //attendance routes
       app.use('/api/attendance', attendanceRoutes);
+      //admin routes  
       app.use('/api/admin/activity-logs', activityLogsRoutes);
       app.use('/api/admin', adminRoutes);
       app.use('/api/admin/remote-attendance', adminRemoteAttendanceRoutes);
       app.use('/api/admin/settings', adminSettingsRoutes);
-      
+      //leave routes
+      app.use('/api/leave-types', leaveTypesRoutes);
+      app.use('/api/leave-balances', leaveBalancesRoutes);
+      app.use('/api/leave-requests', leaveRequestsRoutes);
       console.log('All routes mounted successfully');
       
-      // Test route to verify remote attendance route is working
-      app.get('/api/test-remote-attendance', (req, res) => {
-        res.json({ message: 'Remote attendance route is working!' });
-      });
+      
       
       // Debug: Log all registered routes
       console.log('\n=== Registered Routes ===');

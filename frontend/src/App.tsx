@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { RouteTransitionLoader } from "@/components/ui/RouteTransitionLoader";
 import { ActivityLog } from "./pages/admin/components";
+import { AdminLeaveRequestsPage } from "./pages/admin/AdminLeaveRequestsPage";
 
 // Debug component to log route changes and auth state
 const DebugRouter = () => {
@@ -101,6 +102,13 @@ const App = () => {
                 <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
                   <MainLayout>
                     <AttendanceRecordsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/leave-requests" element={
+                <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
+                  <MainLayout>
+                    <AdminLeaveRequestsPage />
                   </MainLayout>
                 </ProtectedRoute>
               } />

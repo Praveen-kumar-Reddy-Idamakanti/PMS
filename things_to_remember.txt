@@ -1,0 +1,10 @@
+use a same case style in throught out the project, for example if you are using camelCase then use camelCase for all the files
+use JWT base authentication for the project, rather than localStorage.
+remove the not used code from the first itself, don't leave any unused code in the project.
+organize the code in a proper manner, use proper naming conventions for the files and folders.
+use proper comments for the code, so that it is easy to understand for the other developers.
+use proper error handling for the code, so that it is easy to debug.
+use proper logging for the code, so that it is easy to debug.
+use proper version control for the code, so that it is easy to track the changes.
+use proper testing for the code, so that it is easy to test.
+use proper documentation for the code, so that it is easy to understand for the other developers.

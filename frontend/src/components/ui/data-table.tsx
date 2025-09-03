@@ -10,17 +10,44 @@ export interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   isLoading?: boolean;
+  pagination?: {
+    current: number;
+    pageSize: number;
+    total: number;
+    onChange: (page: number, pageSize: number) => void;
+  };
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   isLoading = false,
+  pagination,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    manualPagination: true,
+    pageCount: pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1,
+    onPaginationChange: (updater) => {
+      if (pagination?.onChange) {
+        const currentState = {
+          pageIndex: pagination.current - 1,
+          pageSize: pagination.pageSize,
+        };
+        const newState = typeof updater === 'function' 
+          ? updater(currentState)
+          : updater;
+        pagination.onChange(newState.pageIndex + 1, newState.pageSize);
+      }
+    },
+    state: {
+      pagination: {
+        pageIndex: pagination ? pagination.current - 1 : 0,
+        pageSize: pagination?.pageSize || 10,
+      },
+    },
   });
 
   if (isLoading) {

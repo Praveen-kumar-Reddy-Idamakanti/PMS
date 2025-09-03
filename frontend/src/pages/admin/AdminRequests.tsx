@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RemoteAttendanceRequests } from './components/RemoteAttendanceRequests';
 import { Button } from '@/components/ui/button';
 import { Download, RefreshCw } from 'lucide-react';
+import { AdminLeaveRequestsPage } from './AdminLeaveRequestsPage';
 
 export const AdminRequests = () => {
   return (
@@ -44,8 +45,8 @@ export const AdminRequests = () => {
             <CardHeader>
               <CardTitle>Leave Requests</CardTitle>
             </CardHeader>
-            <CardContent className="text-center py-12 text-muted-foreground">
-              <p>No leave requests pending approval</p>
+            <CardContent>
+              <AdminLeaveRequestsPage />
             </CardContent>
           </Card>
         </TabsContent>
