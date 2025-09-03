@@ -1,9 +1,20 @@
 export interface LeaveType {
-  id: string;
+  id: string | number;
   name: string;
-  yearlyQuota: number;
-  carryForward: number;
-  isActive: boolean;
+  
+  // Frontend fields (camelCase)
+  yearlyQuota?: number;
+  carryForward?: number;
+  isActive?: boolean;
+  monthlyQuota?: number;
+  
+  // Backend fields (snake_case)
+  yearly_quota?: number;
+  carry_forward?: number;
+  is_active?: boolean | number;
+  monthly_quota?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected' | 'pending' | 'approved' | 'rejected';
@@ -39,11 +50,24 @@ export interface LeaveRequest {
 }
 
 export interface LeaveBalance {
-  id: string;
-  userId: string;
-  leaveTypeId: string;
+  // Frontend fields (camelCase)
+  id: string | number;
+  userId: string | number;
+  leaveTypeId: string | number;
   remainingDays: number;
   year: number;
+  
+  // Backend fields (snake_case)
+  user_id?: string | number;
+  leave_type_id?: string | number;
+  leave_type?: string;
+  balance?: number;
+  created_at?: string;
+  updated_at?: string;
+  monthly_quota?: number;
+  yearly_quota?: number;
+  carry_forward_allowed?: number;
+  carry_forward_limit?: number;
 }
 
 export interface RemoteWorkRequest {

@@ -30,12 +30,20 @@ export const LeaveHistoryTable: React.FC = () => {
         setIsLoading(false);
         return;
       }
+      
+      setIsLoading(true);
       try {
         console.log('LeaveHistoryTable: Fetching leave history and types...');
         const [leaveHistoryResponse, leaveTypesResponse] = await Promise.all([
-          leaveService.getLeaveHistory(user.id),
-          leaveService.getLeaveTypes(),
-        ]) as [LeaveHistoryResponse, LeaveType[] | LeaveTypesResponse];
+          leaveService.getLeaveHistory(user.id).catch(error => {
+            console.warn('Error fetching leave history, will show empty state:', error);
+            return { success: true, data: [] }; // Return empty data on error
+          }),
+          leaveService.getLeaveTypes().catch(error => {
+            console.warn('Error fetching leave types:', error);
+            return [];
+          }),
+        ]);
         
         console.log('LeaveHistoryTable: Fetched data:', {
           history: leaveHistoryResponse,
@@ -61,11 +69,9 @@ export const LeaveHistoryTable: React.FC = () => {
         }
       } catch (error) {
         console.error('LeaveHistoryTable: Failed to fetch data:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load leave history. Please try again.',
-          variant: 'destructive',
-        });
+        // Don't show error toast here as we're handling errors in the individual requests
+        setHistory([]);
+        setLeaveTypeList([]);
       } finally {
         setIsLoading(false);
       }
@@ -114,6 +120,15 @@ export const LeaveHistoryTable: React.FC = () => {
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-32"><LoadingSpinner /></div>;
+  }
+  
+  // Show empty state if no history is available
+  if (history.length === 0) {
+    return (
+      <div className="text-center p-8 text-muted-foreground">
+        <p>No leave history found</p>
+      </div>
+    );
   }
   
   console.log('LeaveHistoryTable: Rendering with data:', { history, leaveTypes });

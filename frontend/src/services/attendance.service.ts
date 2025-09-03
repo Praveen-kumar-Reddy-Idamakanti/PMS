@@ -362,13 +362,17 @@ export interface AttendanceRecord {
   id: string;
   userId: string;
   userName: string;
-  role?: string;
-  employeeId?: string;
+  role: string;
+  employeeId: string;
   date: string;
-  checkIn?: string | null;
-  checkOut?: string | null;
-  totalHours?: number;
-  status: 'present' | 'absent' | 'late' | 'half-day';
+  checkIn: string | null;
+  checkOut: string | null;
+  totalHours: number;
+  status: 'present' | 'absent' | 'half-day' | 'on-leave' | 'late';
+  isRemote: boolean;
+  remoteStatus: string | null;
+  remoteReason: string | null;
+  mode: 'office' | 'remote';
 }
 
 export interface AttendanceSummary {
@@ -388,20 +392,24 @@ const getAttendanceByDate = async (params: AttendanceByDateParams): Promise<Atte
     interface AttendanceApiResponse {
       id: string;
       user_id: number;
-      employee_id?: string | null;
       name: string;
-      email: string;
-      role?: string;
+      employee_id: string;
+      role: string;
       checkin_time: string | null;
       checkout_time: string | null;
       total_hours: number;
-      status: 'present' | 'absent' | 'late' | 'half-day';
-      date?: string;
+      status: 'present' | 'absent' | 'late' | 'half-day' | 'on-leave';
+      date: string;
+      mode: 'office' | 'remote';
+      is_remote: boolean;
+      remote_reason: string | null;
       pairs?: Array<{
-        checkin_time?: string;
-        checkout_time?: string;
-        total_hours?: number;
-        status?: 'present' | 'absent' | 'late' | 'half-day';
+        checkin_time: string;
+        checkout_time: string;
+        total_hours: number;
+        status: 'present' | 'absent' | 'late' | 'half-day' | 'on-leave';
+        mode?: 'office' | 'remote';
+        remote_reason?: string | null;
       }>;
     }
 
@@ -421,6 +429,7 @@ const getAttendanceByDate = async (params: AttendanceByDateParams): Promise<Atte
     // Map the backend response to the frontend's expected format
     return attendanceResponse.data?.data?.flatMap(record => {
       const userRole = userRoles.get(record.user_id.toString()) || 'employee';
+      const recordIsRemote = record.mode === 'remote';
       
       // If there are pairs, create a record for each pair
       if (record.pairs?.length > 0) {
@@ -429,26 +438,35 @@ const getAttendanceByDate = async (params: AttendanceByDateParams): Promise<Atte
           userId: record.user_id.toString(),
           userName: record.name || 'Unknown User',
           role: userRole,
-          employeeId: record.employee_id || undefined,
+          employeeId: record.employee_id,
           date: record.date || new Date().toISOString().split('T')[0],
           checkIn: pair.checkin_time || null,
           checkOut: pair.checkout_time || null,
           totalHours: pair.total_hours || 0,
-          status: pair.status || record.status || 'present'
+          status: pair.status || record.status || 'present',
+          isRemote: pair.mode === 'remote' || recordIsRemote,
+          remoteStatus: pair.mode === 'remote' ? (pair.status || record.status) : null,
+          remoteReason: pair.remote_reason || record.remote_reason || null,
+          mode: pair.mode || record.mode || 'office'
         }));
       }
       // If no pairs, use the main record
+      const isRemote = record.mode === 'remote';
       return {
         id: record.id,
         userId: record.user_id.toString(),
         userName: record.name || 'Unknown User',
         role: userRole,
-        employeeId: record.employee_id || undefined,
+        employeeId: record.employee_id,
         date: record.date || new Date().toISOString().split('T')[0],
         checkIn: record.checkin_time || null,
         checkOut: record.checkout_time || null,
         totalHours: record.total_hours || 0,
-        status: record.status || 'present'
+        status: record.status || 'present',
+        isRemote,
+        remoteStatus: isRemote ? record.status : null,
+        remoteReason: isRemote ? record.remote_reason : null,
+        mode: record.mode || 'office'
       };
     }) || [];
   } catch (error: any) {
@@ -471,93 +489,77 @@ const getAttendanceSummary = async (params: AttendanceSummaryParams): Promise<At
   try {
     const { startDate, endDate, userId } = params;
     const response = await api.get<{ data: any[] }>('/admin/attendance', {
-      params: {
-        startDate,
-        endDate,
-        userId,
-      },
+      params: { startDate, endDate, userId }
     });
     
-    // First, get all users to map roles
-    const usersResponse = await api.get<{data: Array<{id: string; role: string}>}>('/admin/users');
-    const users = usersResponse.data?.data || [];
-    const userRoles = new Map(users.map(user => [user.id, user.role]));
+    // Transform the response to match the AttendanceRecord interface
+    const records = response.data?.data?.map(record => ({
+      id: record.id,
+      userId: record.user_id.toString(),
+      userName: record.name || 'Unknown User',
+      role: record.role || 'employee',
+      employeeId: record.employee_id,
+      date: record.date,
+      checkIn: record.checkin_time || null,
+      checkOut: record.checkout_time || null,
+      totalHours: record.total_hours || 0,
+      status: record.status || 'present',
+      isRemote: record.is_remote || false,
+      remoteStatus: record.is_remote ? record.status : null,
+      remoteReason: record.remote_reason || null,
+      mode: record.mode || 'office'
+    })) || [];
     
-    // Transform the response to match the expected format
-    const records = response.data?.data?.flatMap(record => {
-      const userRole = userRoles.get(record.user_id.toString()) || 'employee';
-      const recordDate = record.date || new Date().toISOString().split('T')[0];
-      
-      // Always process the main record first
-      const mainRecord = {
-        id: record.id,
-        userId: record.user_id.toString(),
-        userName: record.name || 'Unknown User',
-        role: userRole,
-        employeeId: record.employee_id || undefined,
-        date: recordDate,
-        checkIn: record.checkin_time || null,
-        checkOut: record.checkout_time || null,
-        totalHours: record.total_hours || 0,
-        status: record.status || 'present'
-      };
-      
-      // If there are pairs, create a record for each pair
-      if (record.pairs?.length > 0) {
-        return [
-          mainRecord,
-          ...record.pairs.map((pair: any, index: number) => ({
-            id: `${record.id}_pair_${index}`,
-            userId: record.user_id.toString(),
-            userName: record.name || 'Unknown User',
-            role: userRole,
-            employeeId: record.employee_id || undefined,
-            date: recordDate,
-            checkIn: pair.checkin_time || null,
-            checkOut: pair.checkout_time || null,
-            totalHours: pair.total_hours || 0,
-            status: pair.status || record.status || 'present'
-          }))
-        ];
-      }
-      
-      return [mainRecord];
-    }) || [];
-
     // Calculate statistics
     const stats = {
       totalCheckIns: records.filter(r => r.checkIn).length,
       totalCheckOuts: records.filter(r => r.checkOut).length,
-      totalWorkingHours: Number(records.reduce((sum, record) => sum + (record.totalHours || 0), 0).toFixed(2)),
-      daysWorked: new Set(records.map(r => r.checkIn?.split('T')[0])).size,
+      totalWorkingHours: records.reduce((sum, r) => sum + (r.totalHours || 0), 0),
+      daysWorked: new Set(records.map(r => r.date)).size,
+      remoteDays: records.filter(r => r.isRemote).length,
+      averageHoursPerDay: 0
     };
-
+    
+    stats.averageHoursPerDay = stats.daysWorked > 0 
+      ? parseFloat((stats.totalWorkingHours / stats.daysWorked).toFixed(2))
+      : 0;
     return {
       records,
-      stats: {
-        ...stats,
-        averageHoursPerDay: stats.daysWorked > 0 ? Number((stats.totalWorkingHours / stats.daysWorked).toFixed(2)) : 0,
-      },
+      stats
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching attendance summary:', error);
-    throw error.response?.data || { message: 'Error fetching attendance summary' };
+    throw error;
   }
 };
 
-const getEmployeeAttendance = async (userId: string, params: { startDate?: string; endDate?: string } = {}) => {
+const getEmployeeAttendance = async (userId: string, params: { startDate?: string; endDate?: string } = {}): Promise<AttendanceRecord[]> => {
   try {
     const { startDate, endDate } = params;
-    const response = await api.get(`/attendance/me`, {
+    const response = await api.get<{ data: any[] }>(`/attendance/me`, {
       params: {
         startDate,
         endDate,
       },
     });
     
-    // Ensure the response format matches what the frontend expects
-    const data = response.data?.data || response.data || [];
-    return { data }; // Wrap in data object to match expected format
+    // Transform the response to include all required fields
+    return response.data?.data?.map(record => ({
+      id: record.id,
+      userId: record.user_id.toString(),
+      userName: record.name || 'Unknown User',
+      role: record.role || 'employee',
+      employeeId: record.employee_id,
+      date: record.date,
+      checkIn: record.checkin_time || null,
+      checkOut: record.checkout_time || null,
+      totalHours: record.total_hours || 0,
+      status: record.status || 'present',
+      isRemote: record.is_remote || record.mode === 'remote',
+      remoteStatus: record.is_remote ? record.status : null,
+      remoteReason: record.remote_reason || null,
+      mode: record.mode || 'office'
+    })) || [];
   } catch (error: any) {
     console.error('Error in getEmployeeAttendance:', error);
     throw error.response?.data || { message: 'Error fetching attendance records' };

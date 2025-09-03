@@ -10,42 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-
-type AttendanceStatus = 'present' | 'absent' | 'late' | 'half-day';
-
-interface AttendanceRecord {
-  id: string;
-  userId: string;
-  userName: string;
-  employeeId?: string;
-  checkIn: string;
-  checkOut?: string | null;
-  totalHours?: number;
-  status: AttendanceStatus;
-  date?: string;
-  notes?: string;
-  location?: {
-    latitude: number;
-    longitude: number;
-    address?: string;
-  };
-  photo?: string;
-}
-
-interface UserAttendanceStats {
-  userId: string;
-  userName: string;
-  employeeId?: string; // Made optional with ?
-  totalPresent: number;
-  totalAbsent: number;
-  totalLate: number;
-  totalHalfDay: number;
-  totalCheckIns: number;
-  totalCheckOuts: number;
-  totalHoursWorked: number;
-  lastCheckIn?: string;
-  lastCheckOut?: string;
-}
+import { AttendanceRecord, AttendanceStatus, UserAttendanceStats } from '@/types/attendance';
 
 const statusConfig = {
   present: { label: 'Present', className: 'bg-green-100 text-green-800' },

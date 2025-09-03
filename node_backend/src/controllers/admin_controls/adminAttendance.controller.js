@@ -1,6 +1,43 @@
-const { query, run } = require('../../config/db');
+const { query, run, getDB } = require('../../config/db');
 const { NotFoundError, BadRequestError } = require('../../utils/errors');
 const Attendance = require('../../models/attendance.model');
+
+// Helper function to determine attendance status
+function determineStatus(checkinTime, checkoutTime) {
+  if (!checkinTime) return 'absent';
+  
+  const checkin = new Date(checkinTime);
+  const checkout = checkoutTime ? new Date(checkoutTime) : null;
+  
+  // If no checkout, but there's a check-in, mark as present
+  if (!checkout) return 'present';
+  
+  // Calculate total hours
+  const hours = (checkout - checkin) / (1000 * 60 * 60);
+  
+  // If less than 4 hours, mark as half-day
+  if (hours < 4) return 'half-day';
+  
+  // If check-in is after 10 AM, mark as late
+  if (checkin.getHours() >= 10) return 'late';
+  
+  return 'present';
+}
+
+// Helper function to calculate total hours between check-in and check-out
+function calculateTotalHours(checkinTime, checkoutTime) {
+  if (!checkinTime || !checkoutTime) return 0;
+  
+  const checkin = new Date(checkinTime);
+  const checkout = new Date(checkoutTime);
+  
+  // Calculate difference in hours
+  const diffMs = checkout - checkin;
+  const diffHours = diffMs / (1000 * 60 * 60);
+  
+  // Round to 2 decimal places
+  return Math.round(diffHours * 100) / 100;
+}
 
 // Get all attendance records with filtering options
 exports.getAllAttendance = async (req, res, next) => {
@@ -9,9 +46,16 @@ exports.getAllAttendance = async (req, res, next) => {
     const currentUserRole = req.user.role;
     
     let sqlQuery = `
-      SELECT a.*, u.name, u.email, u.employee_id, u.role 
+      SELECT 
+        a.*, 
+        u.name, 
+        u.email, 
+        u.employee_id, 
+        u.role,
+        a.mode,
+        a.notes as remote_reason
       FROM attendance a
-      JOIN users u ON a.user_id = u.id
+      LEFT JOIN users u ON a.user_id = u.id
       WHERE 1=1
     `;
     const params = [];
@@ -66,45 +110,66 @@ exports.getAllAttendance = async (req, res, next) => {
           name: record.name,
           email: record.email,
           employee_id: record.employee_id,
+          role: record.role,
           date: date,
           checkins: [],
-          checkouts: []
+          checkouts: [],
+          modes: new Set(),
+          remote_reason: null
         };
       }
       
       if (record.type === 'checkin') {
-        userDateMap[key].checkins.push(record.timestamp);
+        userDateMap[key].checkins.push({
+          timestamp: record.timestamp,
+          mode: record.mode,
+          remote_reason: record.remote_reason
+        });
       } else if (record.type === 'checkout') {
-        userDateMap[key].checkouts.push(record.timestamp);
+        userDateMap[key].checkouts.push({
+          timestamp: record.timestamp,
+          mode: record.mode || 'office' // Default to office if not specified
+        });
       }
     });
     
     // Process each user's daily records
     const processedRecords = Object.values(userDateMap).map(record => {
       // Sort check-ins and check-outs
-      const checkins = [...record.checkins].sort();
-      const checkouts = [...record.checkouts].sort();
+      const checkins = [...record.checkins].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const checkouts = [...record.checkouts].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      // Get the primary check-in (first of the day)
+      const primaryCheckin = checkins[0];
+      const mode = primaryCheckin?.mode || 'office';
+      const remote_reason = primaryCheckin?.remote_reason || null;
       
       // Pair check-ins with check-outs
       const pairs = [];
-      let totalHours = 0;
+      let i = 0, j = 0;
       
-      for (let i = 0; i < Math.max(checkins.length, checkouts.length); i++) {
-        const checkin = checkins[i] || null;
-        const checkout = checkouts[i] || null;
-        
-        pairs.push({ checkin, checkout });
-        
-        // Calculate hours if we have both check-in and check-out
-        if (checkin && checkout) {
-          const hours = (new Date(checkout) - new Date(checkin)) / (1000 * 60 * 60);
-          totalHours += hours;
+      while (i < checkins.length && j < checkouts.length) {
+        // Only pair if check-out is after check-in
+        if (new Date(checkouts[j].timestamp) > new Date(checkins[i].timestamp)) {
+          pairs.push({
+            checkin: checkins[i].timestamp,
+            checkout: checkouts[j].timestamp,
+            mode: checkins[i].mode,
+            remote_reason: checkins[i].remote_reason
+          });
+          i++;
+          j++;
+        } else {
+          j++; // Skip this check-out as it's before the current check-in
         }
       }
       
       // Get the first check-in and last check-out if available
       const firstCheckin = checkins.length > 0 ? checkins[0] : null;
-      const lastCheckout = checkouts.length > 0 ? checkouts[checkouts.length - 1] : null;
+      const lastCheckout = checkouts.length > 0 ? checkouts[checkouts.length - 1].timestamp : null;
+      
+      const isRemote = mode === 'remote';
+      const status = determineStatus(firstCheckin?.timestamp, lastCheckout);
       
       return {
         id: `${record.user_id}_${record.date}`,
@@ -112,12 +177,16 @@ exports.getAllAttendance = async (req, res, next) => {
         name: record.name,
         email: record.email,
         employee_id: record.employee_id,
+        role: record.role,
         date: record.date,
-        checkin_time: firstCheckin,
+        checkin_time: firstCheckin?.timestamp || null,
         checkout_time: lastCheckout,
-        total_hours: totalHours,
-        status: checkins.length > 0 ? 'present' : 'absent',
-        pairs: pairs
+        status: status,
+        total_hours: calculateTotalHours(firstCheckin?.timestamp, lastCheckout),
+        pairs: pairs,
+        mode: mode,
+        is_remote: isRemote,
+        remote_reason: isRemote ? remote_reason : null
       };
     });
     
@@ -214,10 +283,13 @@ exports.getAttendanceStats = async (req, res, next) => {
           u.id as user_id,
           u.name,
           u.email,
+          u.employee_id,
           u.role,
           DATE(a.timestamp) as date,
           MAX(CASE WHEN a.type = 'checkin' THEN a.timestamp END) as checkin_time,
-          MAX(CASE WHEN a.type = 'checkout' THEN a.timestamp END) as checkout_time
+          MAX(CASE WHEN a.type = 'checkout' THEN a.timestamp END) as checkout_time,
+          MAX(CASE WHEN a.type = 'checkin' THEN a.mode END) as mode,
+          MAX(CASE WHEN a.type = 'checkin' THEN a.notes END) as remote_reason
         FROM users u
         LEFT JOIN attendance a ON u.id = a.user_id
         WHERE 1=1

@@ -6,7 +6,11 @@ import { useToast } from '@/components/ui/use-toast';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/contexts/AuthContext';
 
-export const LeaveBalanceDisplay: React.FC = () => {
+interface LeaveBalanceDisplayProps {
+  refreshKey?: number;
+}
+
+export const LeaveBalanceDisplay: React.FC<LeaveBalanceDisplayProps> = ({ refreshKey = 0 }) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
@@ -44,35 +48,81 @@ export const LeaveBalanceDisplay: React.FC = () => {
     };
 
     fetchData();
-  }, [toast, user?.id]);
+  }, [toast, user?.id, refreshKey]);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-32"><LoadingSpinner /></div>;
   }
 
-  if (balances.length === 0) {
-    return <p className="text-muted-foreground">No leave balances found.</p>;
+  // Always show all leave types, with their balance if available
+  const allLeaveBalances = leaveTypes
+    .filter(type => type.isActive || type.is_active)
+    .map(type => {
+      const balance = balances.find(b => 
+        String(b.leave_type_id) === String(type.id) || 
+        String(b.leaveTypeId) === String(type.id)
+      );
+      
+      const remainingDays = balance ? (balance.balance ?? balance.remainingDays) : (type.yearly_quota ?? type.yearlyQuota ?? 0);
+      
+      return {
+        id: type.id,
+        name: type.name,
+        remainingDays,
+        isActive: type.isActive ?? Boolean(type.is_active),
+        yearlyQuota: type.yearly_quota ?? type.yearlyQuota ?? 0,
+        isBalanceAvailable: !!balance
+      };
+    });
+
+  if (allLeaveBalances.length === 0) {
+    return <p className="text-muted-foreground">No leave types found.</p>;
   }
 
-  const getLeaveTypeName = (leaveTypeId: string) => {
-    const type = leaveTypes.find(t => t.id === leaveTypeId);
-    return type ? type.name : 'Unknown Leave Type';
+  // Transform backend snake_case to frontend camelCase
+  const transformedBalances = balances.map(balance => {
+    const leaveTypeId = balance.leave_type_id ?? balance.leaveTypeId;
+    const remainingDays = balance.balance ?? balance.remainingDays;
+    const year = balance.year;
+    
+    return {
+      id: balance.id,
+      userId: balance.user_id ?? balance.userId,
+      leaveTypeId,
+      remainingDays,
+      year,
+      // Include other fields if needed
+      leaveTypeName: balance.leave_type,
+      monthlyQuota: balance.monthly_quota,
+      yearlyQuota: balance.yearly_quota,
+    };
+  });
+
+  const getLeaveTypeName = (leaveTypeId: string | number, leaveTypeName?: string) => {
+    if (leaveTypeName) return leaveTypeName;
+    
+    // Handle both string and number IDs
+    const type = leaveTypes.find(t => 
+      String(t.id) === String(leaveTypeId) || 
+      t.id === leaveTypeId
+    );
+    return type ? type.name : `Leave Type (ID: ${leaveTypeId})`;
   };
 
   return (
     <div className="grid gap-4">
-      {balances.map((balance) => (
+      <h3 className="text-lg font-medium">Your Leave Balance</h3>
+      {allLeaveBalances.map((balance) => (
         <Card key={balance.id}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              {getLeaveTypeName(balance.leaveTypeId)}
+              {balance.name}
             </CardTitle>
-            {/* Icon can be added here */}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{balance.remainingDays} days</div>
             <p className="text-xs text-muted-foreground">
-              Balance for {balance.year}
+              {balance.isBalanceAvailable ? 'Remaining balance' : 'Yearly quota'}
             </p>
           </CardContent>
         </Card>

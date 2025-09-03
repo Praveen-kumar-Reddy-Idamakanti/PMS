@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useAuth } from '@/contexts/AuthContext';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
@@ -38,8 +39,13 @@ const formSchema = z.object({
 
 type LeaveFormValues = z.infer<typeof formSchema>;
 
-export const LeaveRequestForm: React.FC = () => {
+interface LeaveRequestFormProps {
+  onSuccess?: () => void;
+}
+
+export const LeaveRequestForm: React.FC<LeaveRequestFormProps> = ({ onSuccess }) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -113,6 +119,15 @@ export const LeaveRequestForm: React.FC = () => {
   }, [toast]);
 
   const onSubmit = async (values: LeaveFormValues) => {
+    if (!user?.id) {
+      toast({
+        title: 'Error',
+        description: 'User not authenticated. Please log in again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const finalEndDate = isSingleDay ? values.startDate : values.endDate;
@@ -127,18 +142,33 @@ export const LeaveRequestForm: React.FC = () => {
         return;
       }
 
+      // Submit the leave request
       await leaveService.submitLeaveRequest({
         leaveTypeId: values.leaveTypeId,
         startDate: format(values.startDate, 'yyyy-MM-dd'),
         endDate: format(finalEndDate, 'yyyy-MM-dd'),
         reason: values.reason,
       });
+
+      // After successful submission, refresh all leave balances
+      try {
+        // This will ensure we get the latest balances from the server
+        await leaveService.getLeaveBalances(user.id);
+      } catch (error) {
+        console.error('Error refreshing leave balances:', error);
+      }
+
       toast({
         title: 'Success',
         description: 'Leave request submitted successfully!',
       });
       form.reset();
       setIsSingleDay(true); // Reset to single day after submission
+      
+      // Call the onSuccess callback if provided
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error: any) {
       console.error('Failed to submit leave request:', error);
       toast({

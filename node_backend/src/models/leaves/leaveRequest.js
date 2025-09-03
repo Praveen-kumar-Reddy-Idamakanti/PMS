@@ -1,6 +1,6 @@
 // models/LeaveRequest.js
 const { query, run } = require('../../config/db');
-const LeaveBalance = require('./LeaveBalance');
+const LeaveBalance = require('./leaveBalance');
 
 // Utility functions
 function daysBetweenInclusive(start_date, end_date) {
@@ -39,15 +39,37 @@ const LeaveRequest = {
   async create(data) {
     const validatedData = validateLeaveRequest(data);
     const days = daysBetweenInclusive(validatedData.start_date, validatedData.end_date);
-    const year = new Date().getFullYear();
+    const startDate = new Date(validatedData.start_date);
+    const year = startDate.getFullYear();
+    const month = startDate.getMonth() + 1; // JavaScript months are 0-indexed
     
-    // Check leave balance
+    // Check if leave type exists
     const [leaveType] = await query('SELECT * FROM leave_types WHERE id = ?', [validatedData.leave_type_id]);
     if (!leaveType) {
       throw new Error('Invalid leave type');
     }
     
-    let balance = await LeaveBalance.get(
+    // Check if this is a casual leave (assuming 'Casual' is the name of the leave type)
+    if (leaveType.name.toLowerCase() === 'casual') {
+      // Check for existing casual leaves in the same month
+      const existingCasualLeaves = await query(
+        `SELECT lr.* FROM leave_requests lr
+         JOIN leave_types lt ON lr.leave_type_id = lt.id
+         WHERE lr.user_id = ? 
+           AND lt.name = 'Casual'
+           AND strftime('%Y', lr.start_date) = ?
+           AND strftime('%m', lr.start_date) = ?
+           AND lr.status != 'rejected'`, // Don't count rejected leaves
+        [validatedData.user_id, year.toString(), month.toString().padStart(2, '0')]
+      );
+      
+      if (existingCasualLeaves.length > 0) {
+        throw new Error('Only one casual leave is allowed per month');
+      }
+    }
+    
+    // Check leave balance but don't deduct yet
+    const balance = await LeaveBalance.get(
       validatedData.user_id,
       validatedData.leave_type_id,
       year
@@ -61,11 +83,11 @@ const LeaveRequest = {
         year,
         leaveType.yearly_quota || 0
       );
-      balance = { balance: leaveType.yearly_quota || 0 };
     }
     
-    // Check if sufficient balance exists
-    if (balance.balance < days) {
+    // Check if sufficient balance would exist (without deducting yet)
+    const currentBalance = balance ? balance.balance : (leaveType.yearly_quota || 0);
+    if (currentBalance < days) {
       throw new Error('Insufficient leave balance');
     }
     
@@ -96,15 +118,7 @@ const LeaveRequest = {
         [result.insertId]
       );
       
-      // Only deduct balance if this is a new request
-      if (!data.id) {
-        await LeaveBalance.updateBalance(
-          validatedData.user_id,
-          validatedData.leave_type_id,
-          year,
-          -days  // Deduct the requested days
-        );
-      }
+      // Don't deduct balance on creation, will be handled on approval
       
       await run('COMMIT');
       return newRequest || { id: result.insertId, days };
@@ -238,8 +252,11 @@ const LeaveRequest = {
 
     await run('BEGIN TRANSACTION');
     try {
+      const year = new Date(req.start_date).getFullYear();
+      
+      // Handle status changes
       if (newStatus === 'approved') {
-        const year = new Date(req.start_date).getFullYear();
+        // Only check and deduct balance when approving
         const balanceRow = await LeaveBalance.get(req.user_id, req.leave_type_id, year);
         const currentBalance = (balanceRow && balanceRow.balance) || 0;
         
@@ -247,6 +264,7 @@ const LeaveRequest = {
           throw new Error('Insufficient leave balance');
         }
         
+        // Deduct the days from the balance
         await LeaveBalance.updateBalance(
           req.user_id, 
           req.leave_type_id, 
@@ -254,8 +272,7 @@ const LeaveRequest = {
           -req.days
         );
       } else if (req.status === 'approved' && newStatus !== 'approved') {
-        // If previously approved and now changing status, add back the days
-        const year = new Date(req.start_date).getFullYear();
+        // If previously approved and now rejecting/cancelling, add back the days
         await LeaveBalance.updateBalance(
           req.user_id,
           req.leave_type_id,

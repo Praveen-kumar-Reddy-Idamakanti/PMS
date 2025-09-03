@@ -6,6 +6,11 @@ import { LeaveBalanceDisplay } from '@/components/leaves/LeaveBalanceDisplay';
 import { LeaveHistoryTable } from '@/components/leaves/LeaveHistoryTable';
 
 export const LeaveRequestPage: React.FC = () => {
+  const [refreshKey, setRefreshKey] = React.useState(0);
+
+  const handleLeaveRequestSuccess = () => {
+    setRefreshKey(prev => prev + 1);
+  };
   return (
     <div className="space-y-6">
       <h2 className="text-3xl font-bold tracking-tight">Leave Management</h2>
@@ -25,7 +30,7 @@ export const LeaveRequestPage: React.FC = () => {
                   <CardTitle>Submit New Leave Request</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <LeaveRequestForm />
+                  <LeaveRequestForm onSuccess={handleLeaveRequestSuccess} />
                 </CardContent>
               </Card>
             </div>
@@ -36,7 +41,7 @@ export const LeaveRequestPage: React.FC = () => {
                   <CardTitle className="text-lg">Your Leave Balance</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <LeaveBalanceDisplay />
+                  <LeaveBalanceDisplay refreshKey={refreshKey} />
                 </CardContent>
               </Card>
             </div>

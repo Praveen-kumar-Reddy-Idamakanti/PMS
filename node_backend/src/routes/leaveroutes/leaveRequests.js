@@ -4,21 +4,22 @@ const { auth } = require('../../middleware/auth');
 const LeaveRequest = require('../../models/leaves/leaveRequest');
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(auth);
-
 /**
  * @route   GET /api/leave-requests/user/:userId
  * @desc    Get leave requests for a specific user
- * @access  Private
+ * @access  Private (user can view their own requests, team leaders can view their team's requests)
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', auth, async (req, res) => {
   try {
     const { userId } = req.params;
     const { status, year } = req.query;
     
-    // Only allow users to view their own requests unless they're admins
-    if (req.user.id !== userId && req.user.role !== 'super_admin') {
+    // Check if user is viewing their own requests or is a team leader
+    const isViewingOwnRequests = req.user.id.toString() === userId;
+    const isTeamLeader = req.user.role === 'team_leader' || req.user.role === 'admin' || req.user.role === 'super_admin';
+    
+    // If not viewing own requests and not a team leader, deny access
+    if (!isViewingOwnRequests && !isTeamLeader) {
       return res.status(403).json({ 
         success: false, 
         error: 'Not authorized to view these leave requests' 
@@ -35,6 +36,9 @@ router.get('/user/:userId', async (req, res) => {
     });
   }
 });
+
+// Apply auth middleware to all write operations
+router.use(auth);
 
 /**
  * @route   POST /api/leave-requests

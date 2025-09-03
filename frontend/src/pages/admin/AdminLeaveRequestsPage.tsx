@@ -194,13 +194,13 @@ export const AdminLeaveRequestsPage: React.FC = () => {
             const mappedRequest: LeaveRequestWithUser = {
               // Base fields
               id: request.id,
-              userId: request.userId,
-              leaveTypeId: request.leaveTypeId,
+              userId: request.user_id,
+              leaveTypeId: request.leave_type_id,
               reason: request.reason || '',
               status: parseStatus(request.status),
               days: request.days || 0,
-              name: request.userName || 'Unknown User',
-              email: request.userEmail || '',
+              name: request.user_name || 'Unknown User',
+              email: request.user_email || '',
               // Date fields
               startDate: new Date(request.startDate),
               endDate: new Date(request.endDate),

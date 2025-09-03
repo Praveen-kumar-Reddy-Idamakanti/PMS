@@ -51,12 +51,18 @@ api.interceptors.response.use(
       // Handle specific status codes
       if (error.response.status === 401 || error.response.status === 403) {
         // Handle unauthorized/forbidden (token expired, invalid, etc.)
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        // Only redirect if not already on the login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        // Only clear auth and redirect if this is not a leave history request
+        const isLeaveHistoryRequest = error.config.url?.includes('/leave-requests/user/');
+        
+        if (!isLeaveHistoryRequest) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          // Only redirect if not already on the login page
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
+        
         // Return a rejected promise with a more descriptive error
         return Promise.reject(new Error(
           error.response.data?.message || 'Authentication required. Please log in again.'
