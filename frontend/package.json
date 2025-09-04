@@ -22,10 +22,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postinstall": "npm run build",
+    "postinstall": "npm install --legacy-peer-deps && npm run build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "vercel-build": "npm install --legacy-peer-deps && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
@@ -64,7 +65,6 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
-    "date-picker": "^0.5.0",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
