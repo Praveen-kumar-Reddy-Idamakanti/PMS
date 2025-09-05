@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 const { logActivity } = require('../utils/activityLogger');
+const LeaveType = require('../models/leaves/LeaveType');
+const LeaveBalance = require('../models/leaves/leaveBalance');
 
 // Helper function to send consistent responses
 const sendResponse = (res, status, success, message, data = null) => {
@@ -9,6 +11,28 @@ const sendResponse = (res, status, success, message, data = null) => {
     if (data) response.data = data;
     return res.status(status).json(response);
 };
+
+// Add this new helper function
+async function initializeUserLeaveBalances(userId) {
+  try {
+    const leaveTypes = await LeaveType.getAll();
+    const currentYear = new Date().getFullYear();
+    
+    for (const type of leaveTypes) {
+      await LeaveBalance.upsert(
+        userId,
+        type.id,
+        currentYear,
+        type.yearly_quota
+      );
+      console.log(`Initialized ${type.name} for user ${userId} with ${type.yearly_quota} days`);
+    }
+    return true;
+  } catch (error) {
+    console.error(`Error initializing leave balances for user ${userId}:`, error);
+    return false;
+  }
+}
 
 /**
  * Register a new user
@@ -36,6 +60,9 @@ const register = async (req, res) => {
                 message: 'Failed to create user'
             });
         }
+
+        // Initialize leave balances for the new user
+        await initializeUserLeaveBalances(user.id);
 
         // Log user registration
         await logActivity(user.id, 'USER_CREATE', {

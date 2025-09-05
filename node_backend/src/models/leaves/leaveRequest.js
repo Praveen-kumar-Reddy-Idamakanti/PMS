@@ -97,41 +97,20 @@ const LeaveRequest = {
       if (leaveTypeName.includes('casual')) {
         console.log(`[LeaveRequest.create] Checking for existing casual leaves for user ${validatedData.user_id} in ${year}-${month}`);
         
-        // Check for any overlapping casual leaves
+        // Check for any casual leaves in the same month
         const queryStr = `
           SELECT lr.* FROM leave_requests lr
           JOIN leave_types lt ON lr.leave_type_id = lt.id
           WHERE lr.user_id = ? 
             AND LOWER(lt.name) LIKE '%casual%'
             AND lr.status NOT IN ('rejected', 'cancelled')
-            AND (
-              -- Check if any existing leave overlaps with the requested date range
-              (date(?) BETWEEN date(lr.start_date) AND date(lr.end_date)) OR
-              (date(?) BETWEEN date(lr.start_date) AND date(lr.end_date)) OR
-              (date(lr.start_date) BETWEEN date(?) AND date(?)) OR
-              (date(lr.end_date) BETWEEN date(?) AND date(?))
-            )`;
+            AND strftime('%Y-%m', lr.start_date) = ?`;
         
         const yearMonth = `${year}-${month.toString().padStart(2, '0')}`;
-        const queryParams = [
-          validatedData.user_id,
-          validatedData.start_date,
-          validatedData.end_date,
-          validatedData.start_date,
-          validatedData.end_date,
-          validatedData.start_date,
-          validatedData.end_date
-        ];
+        const queryParams = [validatedData.user_id, yearMonth];
         
-        console.log('Checking for overlapping casual leaves with params:', {
+        console.log('Checking for existing casual leaves in the same month with params:', {
           userId: validatedData.user_id,
-          startDate: validatedData.start_date,
-          endDate: validatedData.end_date
-        });
-        
-        console.log('[LeaveRequest.create] Checking for existing casual leaves with dates:', {
-          start_date: validatedData.start_date,
-          end_date: validatedData.end_date,
           yearMonth
         });
         
@@ -140,11 +119,9 @@ const LeaveRequest = {
         
         const existingCasualLeaves = await query(queryStr, queryParams);
         
-        console.log(`[LeaveRequest.create] Found ${existingCasualLeaves.length} existing casual leaves`);
+        console.log(`[LeaveRequest.create] Found ${existingCasualLeaves.length} existing casual leaves in month ${yearMonth}`);
         
         if (existingCasualLeaves.length > 0) {
-          console.error(`[LeaveRequest.create] Error: User ${validatedData.user_id} already has a casual leave on ${validatedData.start_date}`);
-          // Get the existing leave details
           const existingLeave = existingCasualLeaves[0];
           const leaveDate = new Date(existingLeave.start_date).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -153,7 +130,7 @@ const LeaveRequest = {
             weekday: 'long'
           });
           
-          throw new Error(`You already have a casual leave scheduled for ${leaveDate}. Please choose a different date or cancel your existing leave request before submitting a new one.`);
+          throw new Error(`You have already taken a casual leave on ${leaveDate}. Only one casual leave is allowed per month.`);
         }
       }
       

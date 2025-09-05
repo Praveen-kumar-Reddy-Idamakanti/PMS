@@ -8,6 +8,7 @@ const logger = require('./utils/logger');
 const requestLogger = require('./middleware/requestLogger');
 const cron = require('node-cron');
 const { runMonthlyAccruals, runYearlyInitAndCarryForward } = require('./jobs/accruals');
+const { scheduleDailyStatusUpdate } = require('./jobs/cronJobs');
 
 // Import routes
 //auth routes
@@ -98,6 +99,9 @@ const setupRoutes = async () => {
       throw new Error(`Database initialization failed: ${initError.message}`);
     }
     
+    // Initialize cron jobs
+    initializeCronJobs();
+    
     cron.schedule('5 0 1 * *', () => {
       runMonthlyAccruals().catch(console.error);
     });
@@ -165,6 +169,23 @@ const setupRoutes = async () => {
     process.exit(1);
   }
 };
+
+function initializeCronJobs() {
+  // Schedule monthly accruals (runs on the 1st of every month)
+  cron.schedule('0 0 1 * *', async () => {
+    logger.info('Running monthly accruals job');
+    try {
+      await runMonthlyAccruals();
+    } catch (error) {
+      logger.error('Error in monthly accruals job:', error);
+    }
+  });
+
+  // Schedule daily status update (runs at 11:59 PM every day)
+  scheduleDailyStatusUpdate();
+  
+  logger.info('All cron jobs have been scheduled');
+}
 
 const PORT = process.env.PORT || 5001;
 

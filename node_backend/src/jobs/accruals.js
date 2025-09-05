@@ -3,7 +3,7 @@
 
 const { query } = require('../config/db');
 const LeaveType = require('../models/leaves/LeaveType');
-const LeaveBalance = require('../models/leaves/LeaveBalance');
+const LeaveBalance = require('../models/leaves/leaveBalance');
 
 /**
  * Helper to get active users (returns array of { id })
