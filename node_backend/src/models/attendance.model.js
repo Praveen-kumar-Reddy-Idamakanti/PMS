@@ -1,5 +1,6 @@
 const { getDB } = require('../config/db');
 const debug = require('debug')('app:models:attendance');
+const { formatDateTime } = require('../utils/dateUtils');
 
 // Enhanced debug function for attendance model
 function debugModel(method, message, data = {}) {
@@ -46,13 +47,13 @@ class Attendance {
         
         const db = getDB();
         const { userId, type, notes, location, photo, mode = 'office' } = attendanceData;
-        const now = new Date().toISOString();
+        const now = new Date();
 
         return new Promise((resolve, reject) => {
             const params = [
                 userId,
                 type,
-                now,
+                now.toISOString(), // Store in ISO format in database
                 notes || null,
                 location?.latitude || null,
                 location?.longitude || null,
@@ -89,10 +90,11 @@ class Attendance {
                         id: this.lastID,
                         userId,
                         type,
-                        timestamp: now,
+                        timestamp: now.toISOString(),
                         notes: notes || null,
                         location: location || null,
-                        photo: photo || null
+                        photo: photo || null,
+                        mode
                     };
                     
                     debugModel('create', 'Attendance record created', { 

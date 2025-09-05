@@ -157,16 +157,14 @@ const approveRemoteRequest = async (req, res) => {
 
     // Create attendance record - set to 10:00 AM in the requested date's timezone
     const attendanceDate = new Date(request.request_date);
-    // Format as YYYY-MM-DD 10:00:00 in local time
-    const year = attendanceDate.getFullYear();
-    const month = String(attendanceDate.getMonth() + 1).padStart(2, '0');
-    const day = String(attendanceDate.getDate()).padStart(2, '0');
-    const timestamp = `${year}-${month}-${day} 10:00:00`;
+    // Set time to 10:00 AM in local time and convert to ISO string with timezone
+    attendanceDate.setHours(10, 0, 0, 0);
+    const timestamp = attendanceDate.toISOString();
     console.log(`Creating attendance record for user ${request.user_id} at ${timestamp}`);
     
     await new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO attendance (user_id, type, timestamp,mode, created_at)
+        `INSERT INTO attendance (user_id, type, timestamp, mode, created_at)
          VALUES (?, 'checkin', ?, 'remote', datetime('now'))`,
         [request.user_id, timestamp],
         function(err) {

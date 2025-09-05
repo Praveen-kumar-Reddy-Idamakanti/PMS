@@ -1,0 +1,137 @@
+const { Sequelize } = require('sequelize');
+const logger = require('../utils/logger');
+
+let sequelize;
+
+// Use environment variables for database configuration
+const dbConfig = {
+  database: process.env.DB_NAME || 'pms',
+  username: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  dialect: 'postgres',
+  logging: (msg) => logger.debug(msg),
+  dialectOptions: {
+    ssl: process.env.NODE_ENV === 'production' ? {
+      require: true,
+      rejectUnauthorized: false
+    } : false
+  }
+};
+
+/**
+ * Connects to the PostgreSQL database using Sequelize
+ * @returns {Promise<Sequelize>} The Sequelize instance
+ */
+const connectDB = async () => {
+    try {
+        if (sequelize) {
+            await sequelize.authenticate();
+            return sequelize;
+        }
+
+        sequelize = new Sequelize(
+            dbConfig.database,
+            dbConfig.username,
+            dbConfig.password,
+            {
+                host: dbConfig.host,
+                port: dbConfig.port,
+                dialect: dbConfig.dialect,
+                logging: dbConfig.logging,
+                dialectOptions: dbConfig.dialectOptions,
+                pool: {
+                    max: 5,
+                    min: 0,
+                    acquire: 30000,
+                    idle: 10000
+                }
+            }
+        );
+
+        await sequelize.authenticate();
+        logger.info('Database connection has been established successfully.');
+        return sequelize;
+    } catch (error) {
+        logger.error('Unable to connect to the database:', error);
+        throw error;
+    }
+};
+
+/**
+ * Closes the database connection
+ * @returns {Promise<void>}
+ */
+const closeDB = async () => {
+    if (sequelize) {
+        await sequelize.close();
+        sequelize = null;
+        logger.info('Database connection closed.');
+    }
+};
+
+/**
+ * Helper function to run a raw SQL query
+ * @param {string} sql - The SQL query
+ * @param {Array} params - Query parameters
+ * @returns {Promise<Array>} The query results
+ */
+const query = async (sql, params = []) => {
+    try {
+        const [results] = await sequelize.query(sql, {
+            replacements: params,
+            type: sequelize.QueryTypes.SELECT
+        });
+        return results;
+    } catch (error) {
+        logger.error('Database query error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Helper function to run an INSERT, UPDATE, or DELETE query
+ * @param {string} sql - The SQL query
+ * @param {Array} params - Query parameters
+ * @returns {Promise<{rowCount: number}>} The number of affected rows
+ */
+const run = async (sql, params = []) => {
+    try {
+        const [results, metadata] = await sequelize.query(sql, {
+            replacements: params
+        });
+        return { rowCount: metadata.rowCount || 0 };
+    } catch (error) {
+        logger.error('Database operation error:', error);
+        throw error;
+    }
+};
+
+module.exports = {
+    connectDB,
+    closeDB,
+    query,
+    run,
+    getSequelize: () => sequelize
+};
+            if (err) {
+                logger.error('Query error:', { sql, params, error: err.message });
+                return reject(err);
+            }
+            resolve({ lastID: this.lastID, changes: this.changes });
+        });
+    });
+};
+
+// Initialize the db instance
+let dbInstance = null;
+
+// Export the functions
+module.exports = {
+    connectDB,
+    getDB,
+    closeDB,
+    query,
+    run
+};

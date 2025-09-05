@@ -40,9 +40,13 @@ export function QuickActionsCard({ status, isLoading, onCheckIn, onCheckOut }: P
 
         {/* Action Buttons */}
         {status === "checked_out" ? (
-          <Button disabled className="w-full cursor-not-allowed opacity-70">
+          <Button 
+            disabled 
+            className="w-full cursor-not-allowed opacity-70"
+            variant="outline"
+          >
             <CheckCircle className="w-4 h-4 mr-2" />
-            Check In (Completed for today)
+            Check Out (Completed for today)
           </Button>
         ) : status === "checked_in" ? (
           <Button onClick={onCheckOut} disabled={isLoading} className="w-full" variant="outline">

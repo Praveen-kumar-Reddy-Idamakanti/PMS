@@ -105,6 +105,7 @@ export default function Dashboard() {
     data: todayStatus,
     isLoading: isLoadingStatus,
     error: statusError,
+    refetch: refetchTodayStatus,
   } = useQuery<TodayStatus>({
     queryKey: ["todayStatus"],
     queryFn: fetchTodayStatus,
@@ -115,17 +116,24 @@ export default function Dashboard() {
     setIsLoading(true);
     try {
       const currentStatus = await attendanceService.getTodaysStatus();
-      if (currentStatus.status === "checked_in") {
-        toast({
-          title: "Already Checked In",
-          description: "You have already checked in today.",
-        });
-        return;
+      
+      // Only prevent check-in if there's an actual check-in time and no checkout time
+      if (currentStatus.checkInTime && !currentStatus.checkOutTime) {
+        if (currentStatus.status === "checked_in") {
+          toast({
+            title: "Already Checked In",
+            description: "You have already checked in today.",
+          });
+          return;
+        }
       }
-      if (currentStatus.status === "checked_out") {
+      
+      // Only prevent check-in if there's an actual check-out time
+      if (currentStatus.checkOutTime) {
         toast({
           title: "Already Checked Out",
-          description: "You have already checked out today.",
+          description: "You have already checked out for today.",
+          variant: "destructive",
         });
         return;
       }
@@ -199,17 +207,29 @@ export default function Dashboard() {
         ...data,
       });
       const checkOutTime = res?.data?.timestamp || res?.timestamp || new Date().toISOString();
-      // Optimistic cache update (already checked out)
-      queryClient.setQueryData(["todayStatus"], (prev: any) => ({
-        ...(prev || {}),
+      // Force update the status to checked_out
+      const updatedStatus: TodayStatus = {
         status: "checked_out",
         isCheckedIn: false,
         needsCheckIn: false,
+        checkInTime: currentStatus.checkInTime || null,
         checkOutTime,
-        checkInTime: prev?.checkInTime || null,
-        isRemote: prev?.isRemote ?? !!res?.isRemote,
-      }));
-      await queryClient.invalidateQueries({ queryKey: ["todayStatus"] });
+        hoursWorked: currentStatus.hoursWorked || 0,
+        isRemote: 'isRemote' in currentStatus ? currentStatus.isRemote : !!res?.isRemote,
+        remoteRequest: null,
+        lastAction: 'checkout'
+      };
+      
+      // Update the cache with the new status
+      queryClient.setQueryData(["todayStatus"], updatedStatus);
+      
+      // Invalidate and refetch to ensure we have the latest status
+      try {
+        await refetchTodayStatus();
+      } catch (error) {
+        console.error('Error refetching status:', error);
+      }
+      
       toast({
         title: "Checked Out",
         description: "You have checked out successfully.",
@@ -276,7 +296,11 @@ export default function Dashboard() {
       </div>
     ) : (
       <AttendanceStatusCard
-        status={todayStatus?.checkOutTime ? 'checked_out' : (todayStatus?.status || "not_checked_in")}
+        status={
+          todayStatus?.checkOutTime || todayStatus?.status === 'checked_out'
+            ? 'checked_out' 
+            : todayStatus?.status || 'not_checked_in'
+        }
         hoursWorked={todayStatus?.hoursWorked || 0}
         checkInTime={todayStatus?.checkInTime || null}
         checkOutTime={todayStatus?.checkOutTime || null}
@@ -289,44 +313,24 @@ export default function Dashboard() {
   <div className="lg:col-span-3 h-full">
     <QuickActionsCard
       status={
-        todayStatus?.checkOutTime
+        // Only show checked_out if there's an actual checkout time
+        todayStatus?.status === 'checked_out' || todayStatus?.checkOutTime
           ? "checked_out"
           : todayStatus?.status || "not_checked_in"
       }
       isLoading={isLoading}
       onCheckIn={() => {
-        if (todayStatus?.status === "checked_out") {
+        if (todayStatus?.checkOutTime || todayStatus?.status === 'checked_out') {
           toast({
             title: "Already Checked Out",
-            description: "You have already checked out today.",
-          });
-          return;
-        }
-        if (todayStatus?.status === "checked_in") {
-          toast({
-            title: "Already Checked In",
-            description: "You have already checked in today.",
+            description: "You have already checked out for today.",
           });
           return;
         }
         setIsCheckInModalOpen(true);
       }}
       onCheckOut={() => {
-        if (todayStatus?.status === "checked_out") {
-          toast({
-            title: "Already Checked Out",
-            description: "You have already checked out today.",
-          });
-          return;
-        }
-        if (todayStatus?.status !== "checked_in") {
-          toast({
-            title: "Not Checked In",
-            description: "You need to be checked in before checking out.",
-            variant: "destructive",
-          });
-          return;
-        }
+        // Open the checkout modal which will handle the actual checkout with data
         setIsCheckOutModalOpen(true);
       }}
     />

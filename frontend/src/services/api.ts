@@ -78,6 +78,14 @@ api.interceptors.response.use(
       
       // For other 4xx/5xx errors, include the error message from the server if available
       if (error.response.status >= 400) {
+        // If there's a response with a message, use that
+        if (error.response.data?.message) {
+          return Promise.reject(new Error(error.response.data.message));
+        }
+        // For validation errors or other structured errors
+        if (error.response.data?.error) {
+          return Promise.reject(new Error(error.response.data.error));
+        }
         const errorMessage = error.response.data?.message || 
                            `Request failed with status ${error.response.status}`;
         return Promise.reject(new Error(errorMessage));

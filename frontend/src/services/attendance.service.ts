@@ -197,13 +197,20 @@ const checkOut = async (data: {
     }
     
     const result = await response.json();
+    const serverData = result?.data || result; // Handle both wrapped and direct responses
+    
+    // Ensure we have a valid status from server or default to 'checked_out'
+    const status = serverData.status === 'checked_out' ? 'checked_out' : 'checked_out';
+    
     return {
-      ...result,
-      status: 'checked_out',
+      ...serverData,
+      status,
       isCheckedIn: false,
       needsCheckIn: false,
       isRemote: !!data.isRemote,
-      checkOutTime: timestamp.toISOString()
+      checkInTime: serverData.checkInTime || serverData.checkin_time || null,
+      checkOutTime: serverData.checkOutTime || serverData.checkout_time || timestamp.toISOString(),
+      hoursWorked: serverData.hoursWorked || serverData.total_hours || 0
     };
   } catch (error: any) {
     console.error('Check-out error:', error);
@@ -252,11 +259,24 @@ const getTodaysStatus = async () => {
           const checkOutTime = payload.checkOutTime || payload.checkout_time || null;
           const hoursWorked = payload.hoursWorked ?? payload.total_hours ?? 0;
           const isRemote = payload.isRemote ?? payload.is_remote ?? (payload.mode === 'remote') ?? false;
-          const derivedStatus = checkOutTime
-            ? 'checked_out'
-            : checkInTime
-            ? 'checked_in'
-            : payload.status || 'not_checked_in';
+          // Determine status based on check-in/check-out times
+          let derivedStatus = 'not_checked_in';
+          
+          if (checkOutTime) {
+            // If there's a checkout time, status is checked_out
+            derivedStatus = 'checked_out';
+          } else if (checkInTime) {
+            // If there's a check-in time but no checkout, status is checked_in
+            derivedStatus = 'checked_in';
+          } else if (payload.status) {
+            // Fall back to the status from the payload if no times are available
+            derivedStatus = payload.status;
+          }
+          
+          // Ensure we don't have a checked_out status without a checkOutTime
+          if (derivedStatus === 'checked_out' && !checkOutTime) {
+            derivedStatus = 'not_checked_in';
+          }
           attendanceStatus = {
             ...attendanceStatus,
             status: derivedStatus,
@@ -298,12 +318,20 @@ const getTodaysStatus = async () => {
             const nowLocal = new Date();
             const defaultCheckIn = new Date(nowLocal);
             defaultCheckIn.setHours(10, 0, 0, 0); // 10:00 AM local time
-            attendanceStatus.checkInTime = defaultCheckIn.toISOString();
+            
+            // Ensure check-in time is not in the future
+            const checkInTime = defaultCheckIn > nowLocal ? nowLocal : defaultCheckIn;
+            attendanceStatus.checkInTime = checkInTime.toISOString();
 
             if (!attendanceStatus.checkOutTime) {
-              const diffMs = nowLocal.getTime() - defaultCheckIn.getTime();
+              const diffMs = nowLocal.getTime() - checkInTime.getTime();
               const diffHrs = diffMs / (1000 * 60 * 60);
               attendanceStatus.hoursWorked = Math.max(0, Number(diffHrs.toFixed(2)));
+              
+              // If somehow we still have negative hours, force a valid state
+              if (attendanceStatus.hoursWorked < 0) {
+                attendanceStatus.hoursWorked = 0;
+              }
             }
           }
         }

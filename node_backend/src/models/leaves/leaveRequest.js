@@ -144,7 +144,16 @@ const LeaveRequest = {
         
         if (existingCasualLeaves.length > 0) {
           console.error(`[LeaveRequest.create] Error: User ${validatedData.user_id} already has a casual leave on ${validatedData.start_date}`);
-          throw new Error('You already have a casual leave on this date. Only one casual leave is allowed per day.');
+          // Get the existing leave details
+          const existingLeave = existingCasualLeaves[0];
+          const leaveDate = new Date(existingLeave.start_date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+          });
+          
+          throw new Error(`You already have a casual leave scheduled for ${leaveDate}. Please choose a different date or cancel your existing leave request before submitting a new one.`);
         }
       }
       
