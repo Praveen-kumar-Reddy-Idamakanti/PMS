@@ -2,3 +2,4 @@ first restricting the user to take one casual leave
 solved attedande GET method for user by modifying timeFormat
 created a default leave balance for all the users when they are created
 created a cron job to update the daily status of the users (present, leave, absent)
+tried some syling for the cards

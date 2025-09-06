@@ -6,13 +6,13 @@ interface Props {
 
 export function AttendanceRateCard({ rate }: Props) {
   return (
-    <Card className="shadow-medium hover:border-orange-500">
+    <Card className="shadow-medium bg-sky-200/20 border border-sky-300">
       <CardHeader>
-        <CardTitle>Attendance Rate</CardTitle>
+        <CardTitle className="text-lg text-sky-600">Attendance Rate</CardTitle>
       </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold">{rate}%</p>
-        <p className="text-sm text-muted-foreground">This month</p>
+      <CardContent className="text-center">
+        <p className="text-2xl font-bold text-sky-700">{rate}%</p>
+        <p className="text-sm text-sky-600">This month</p>
       </CardContent>
     </Card>
   );

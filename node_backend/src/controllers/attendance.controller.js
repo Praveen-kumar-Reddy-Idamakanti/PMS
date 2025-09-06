@@ -1,34 +1,6 @@
 const Attendance = require('../models/attendance.model');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../utils/activityLogger');
-const { formatDateTime, formatDate } = require('../utils/dateUtils');
-
-/**
- * Format attendance record with consistent date formatting
- * @param {Object} record - The attendance record to format
- * @returns {Object} Formatted attendance record
- */
-const formatAttendanceRecord = (record) => {
-    if (!record) return null;
-    
-    const formatted = { ...record };
-    
-    // Format timestamps
-    if (record.timestamp) {
-        formatted.timestamp = formatDateTime(record.timestamp);
-    }
-    if (record.date) {
-        formatted.date = formatDate(record.date);
-    }
-    if (record.checkIn) {
-        formatted.checkIn = formatDateTime(record.checkIn);
-    }
-    if (record.checkOut) {
-        formatted.checkOut = formatDateTime(record.checkOut);
-    }
-    
-    return formatted;
-};
 
 /**
  * Debug function for attendance controller
@@ -69,7 +41,7 @@ const checkIn = async (req, res) => {
             });
         }
 
-        const { notes, location, photo, isRemote = false } = req.body;
+        const { notes, location, photo } = req.body;
         const userId = req.user.id;
 
         // Check if user already checked in today (considering timezone)
@@ -82,22 +54,13 @@ const checkIn = async (req, res) => {
             });
         }
 
-        // Validate location when office mode
-        if (!isRemote && !location) {
-            return res.status(400).json({
-                success: false,
-                message: 'Location is required for office check-ins'
-            });
-        }
-
-        // Create check-in record with mode derived from isRemote
+        // Create check-in record
         const checkInRecord = await Attendance.create({
             userId,
             type: 'checkin',
             notes,
             location,
-            photo,
-            mode: isRemote ? 'remote' : 'office'
+            photo
         });
 
         // Log check-in activity
@@ -107,13 +70,10 @@ const checkIn = async (req, res) => {
             recordId: checkInRecord.id
         }, req);
 
-        // Format record before sending response
-        const formattedRecord = formatAttendanceRecord(checkInRecord);
-
         res.status(201).json({
             success: true,
             message: 'Checked in successfully',
-            data: formattedRecord
+            data: checkInRecord
         });
 
     } catch (error) {
@@ -213,7 +173,7 @@ const checkOut = async (req, res) => {
         }
 
         // Create the checkout record
-        const checkOutRecord = await Attendance.create({ 
+        const checkOut = await Attendance.create({ 
             userId, 
             type: 'checkout', 
             notes, 
@@ -226,22 +186,19 @@ const checkOut = async (req, res) => {
         await logActivity(userId, 'USER_CHECKOUT', {
             action: isRemoteMode ? 'remote_checked_out' : 'checked_out',
             location: isRemoteMode ? 'Remote' : (location || 'Not specified'),
-            recordId: checkOutRecord.id
+            recordId: checkOut.id
         }, req);
         
         // Calculate hours worked for today (in user's timezone)
         const { totalHours } = await Attendance.calculateWorkedHours(userId, userToday);
 
-        // Format record before sending response
-        const formattedRecord = formatAttendanceRecord({
-            ...checkOutRecord,
-            hoursWorkedToday: totalHours
-        });
-
-        res.status(200).json({
-            success: true,
-            message: 'Checked out successfully',
-            data: formattedRecord
+        res.status(201).json({ 
+            success: true, 
+            message: 'Checked out successfully', 
+            data: { 
+                ...checkOut, 
+                hoursWorkedToday: totalHours 
+            } 
         });
     } catch (error) {
         console.error('Check-out error:', error);
@@ -273,9 +230,6 @@ const getAttendanceRecords = async (req, res) => {
             offset: parseInt(offset)
         });
 
-        // Format the records
-        const formattedRecords = records.map(record => formatAttendanceRecord(record));
-
         // Calculate total hours for the period if dates are provided
         let summary = null;
         if (startDate || endDate) {
@@ -293,7 +247,7 @@ const getAttendanceRecords = async (req, res) => {
         res.json({
             success: true,
             data: {
-                records: formattedRecords,
+                records,
                 summary
             }
         });
@@ -429,13 +383,10 @@ const getAttendanceSummary = async (req, res) => {
             limit: 1000 // Adjust based on expected volume
         });
 
-        // Format the records
-        const formattedRecords = allRecords.map(record => formatAttendanceRecord(record));
-
         // Calculate days worked and other metrics
         const daysWorked = new Set(records.map(r => r.date)).size;
-        const totalCheckIns = formattedRecords.filter(r => r.type === 'checkin').length;
-        const totalCheckOuts = formattedRecords.filter(r => r.type === 'checkout').length;
+        const totalCheckIns = allRecords.filter(r => r.type === 'checkin').length;
+        const totalCheckOuts = allRecords.filter(r => r.type === 'checkout').length;
 
         res.json({
             success: true,
@@ -491,13 +442,10 @@ const getMyAttendance = async (req, res) => {
             offset: 0
         });
 
-        // Format the records
-        const formattedRecords = records.map(record => formatAttendanceRecord(record));
-
         // Group records by date and calculate hours
         const dailyRecords = {};
         
-        formattedRecords.forEach(record => {
+        records.forEach(record => {
             const date = new Date(record.timestamp).toISOString().split('T')[0];
             
             if (!dailyRecords[date]) {
@@ -522,7 +470,7 @@ const getMyAttendance = async (req, res) => {
         });
 
         // Format response with calculated hours
-        const finalRecords = Object.values(dailyRecords).map(dayRecord => {
+        const formattedRecords = Object.values(dailyRecords).map(dayRecord => {
             // Sort check-ins and check-outs
             const checkins = dayRecord.checkins.sort();
             const checkouts = dayRecord.checkouts.sort();
@@ -550,12 +498,12 @@ const getMyAttendance = async (req, res) => {
             };
         }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date descending
 
-        console.log(`getMyAttendance returning ${finalRecords.length} records with total hours:`, 
-            finalRecords.map(r => ({ date: r.date, hours: r.totalHours })));
+        console.log(`getMyAttendance returning ${formattedRecords.length} records with total hours:`, 
+            formattedRecords.map(r => ({ date: r.date, hours: r.totalHours })));
 
         res.status(200).json({
             success: true,
-            data: finalRecords
+            data: formattedRecords
         });
 
     } catch (error) {

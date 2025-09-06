@@ -26,6 +26,8 @@ const remoteAttendanceRoutes = require('./routes/remoteAttendanceRoutes');
 const leaveTypesRoutes = require('./routes/leaveroutes/leaveTypes');
 const leaveBalancesRoutes = require('./routes/leaveroutes/leaveBalances');
 const leaveRequestsRoutes = require('./routes/leaveroutes/leaveRequests');
+// calendar routes
+const calendarRoutes = require('./routes/calendar.routes');
 
 const app = express();
 
@@ -136,6 +138,9 @@ const setupRoutes = async () => {
       app.use('/api/leave-types', leaveTypesRoutes);
       app.use('/api/leave-balances', leaveBalancesRoutes);
       app.use('/api/leave-requests', leaveRequestsRoutes);
+      
+      // calendar routes
+      app.use('/api/calendar', calendarRoutes);
       //console.log('All routes mounted successfully');
       
       

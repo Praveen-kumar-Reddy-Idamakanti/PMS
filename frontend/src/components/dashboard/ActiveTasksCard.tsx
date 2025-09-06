@@ -12,17 +12,17 @@ interface Props {
 
 export function ActiveTasksCard({ tasks = [] }: Props) {
   return (
-    <Card className="shadow-medium hover:border-orange-500">
+    <Card className="shadow-medium bg-status-excellent/10 border border-status-excellent">
       <CardHeader>
-        <CardTitle>Active Tasks</CardTitle>
+        <CardTitle className="text-lg text-status-excellent">Active Tasks</CardTitle>
       </CardHeader>
       <CardContent>
         {tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active tasks</p>
+          <p className="text-sm text-status-excellent text-center">No active tasks</p>
         ) : (
           <ul className="space-y-1">
             {tasks.map((task) => (
-              <li key={task.id} className="text-sm">
+              <li key={task.id} className="text-sm text-foreground flex items-center gap-2">
                 {task.completed ? "✅" : "🟠"} {task.title}
               </li>
             ))}

@@ -1,21 +1,16 @@
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 
-interface Props {
-  totalHours: number;
-  daysPresent: number;
-  daysAbsent: number;
-}
+interface Props { totalHours: number; }
 
-export function WeeklySummaryCard({ totalHours, daysPresent, daysAbsent }: Props) {
+export function WeeklySummaryCard({ totalHours }: Props) {
   return (
-    <Card className="shadow-medium hover:border-orange-500">
+    <Card className="shadow-medium bg-status-warning/10 border border-status-warning">
       <CardHeader>
-        <CardTitle>Weekly Summary</CardTitle>
+        <CardTitle className="text-lg text-status-warning">Weekly Summary</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-sm">Total Hours: <b>{totalHours}h</b></p>
-        <p className="text-sm">Days Present: <b>{daysPresent}</b></p>
-        <p className="text-sm">Days Absent: <b>{daysAbsent}</b></p>
+      <CardContent className="text-center p-4">
+        <div className="text-2xl font-bold text-foreground">{totalHours}h</div>
+        <div className="text-sm text-muted-foreground mt-1">Total Hours</div>
       </CardContent>
     </Card>
   );

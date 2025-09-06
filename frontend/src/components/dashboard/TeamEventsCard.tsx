@@ -12,17 +12,17 @@ interface Props {
 
 export function TeamEventsCard({ events = [] }: Props) {
   return (
-    <Card className="shadow-medium hover:border-orange-500">
+    <Card className="shadow-medium bg-status-critical/10 border border-status-critical">
       <CardHeader>
-        <CardTitle>Team Events</CardTitle>
+        <CardTitle className="text-lg text-status-critical">Team Events</CardTitle>
       </CardHeader>
       <CardContent>
         {events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No upcoming events</p>
+          <p className="text-sm text-status-critical text-center">No upcoming events</p>
         ) : (
           <ul className="space-y-1">
             {events.map((event) => (
-              <li key={event.id} className="text-sm">
+              <li key={event.id} className="text-sm text-foreground flex items-center gap-2">
                 📅 {event.title} – {event.date}
               </li>
             ))}

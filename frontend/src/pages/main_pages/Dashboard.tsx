@@ -339,15 +339,14 @@ export default function Dashboard() {
 
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-full h-20">
           <WeeklySummaryCard 
             totalHours={0} 
-            daysPresent={0} 
-            daysAbsent={0} 
           />
+          <AttendanceRateCard rate={0} />
           <ActiveTasksCard tasks={[]} />
           <TeamEventsCard events={[]} />
-          <AttendanceRateCard rate={0} />
+          
         </div>
       </div>
 
