@@ -20,6 +20,11 @@ import { useEffect } from "react";
 import { RouteTransitionLoader } from "@/components/ui/RouteTransitionLoader";
 import { ActivityLog } from "./pages/admin/components";
 import { AdminLeaveRequestsPage } from "./pages/admin/AdminLeaveRequestsPage";
+import Events from "./pages/main_pages/events/Events";
+import EventDetails from "./pages/main_pages/events/EventDetails";
+import CreateEvent from "./pages/main_pages/events/CreateEvent";
+import EventHistory from "./pages/main_pages/events/EventHistory";
+import EditEvent from "./pages/main_pages/events/EditEvent";
 
 // Debug component to log route changes and auth state
 const DebugRouter = () => {
@@ -94,6 +99,31 @@ const App = () => {
               <Route path="/requests" element={
                 <MainLayout>
                   <Requests />
+                </MainLayout>
+              } />
+              <Route path="/events" element={
+                <MainLayout>
+                  <Events />
+                </MainLayout>
+              } />
+              <Route path="/events/new" element={
+                <MainLayout>
+                  <CreateEvent />
+                </MainLayout>
+              } />
+              <Route path="/events/:id" element={
+                <MainLayout>
+                  <EventDetails />
+                </MainLayout>
+              } />
+              <Route path="/events/history" element={
+                <MainLayout>
+                  <EventHistory />
+                </MainLayout>
+              } />
+              <Route path="/events/edit/:id" element={
+                <MainLayout>
+                  <EditEvent />
                 </MainLayout>
               } />
               

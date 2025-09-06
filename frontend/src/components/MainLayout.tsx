@@ -75,6 +75,15 @@ export function MainLayout({ children }: MainLayoutProps) {
               >
                 Requests
               </Link>
+              <Link
+                to="/events"
+                className={cn(
+                  'text-sm font-medium transition-colors hover:text-primary',
+                  location.pathname === '/events' ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
+                Events
+              </Link>
               {isSuperAdmin && (
                 <Link
                   to="/admin"
@@ -137,6 +146,10 @@ function MobileNav() {
             <Link to="/requests" onClick={() => setOpen(false)}
               className={cn('block px-4 py-2 text-sm hover:bg-accent', location.pathname === '/requests' ? 'text-primary' : '')}>
               Requests
+            </Link>
+            <Link to="/events" onClick={() => setOpen(false)}
+              className={cn('block px-4 py-2 text-sm hover:bg-accent', location.pathname === '/events' ? 'text-primary' : '')}>
+              Events
             </Link>
             {isSuperAdmin && (
               <Link to="/admin" onClick={() => setOpen(false)}

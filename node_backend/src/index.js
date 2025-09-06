@@ -28,6 +28,7 @@ const leaveBalancesRoutes = require('./routes/leaveroutes/leaveBalances');
 const leaveRequestsRoutes = require('./routes/leaveroutes/leaveRequests');
 // calendar routes
 const calendarRoutes = require('./routes/calendar.routes');
+const eventRoutes = require('./routes/event.routes.js');
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.options('*', cors(corsOptions));
 // Body parser middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.static('public'));
 
 // Request logging middleware (must be after body parser)
 app.use(requestLogger);
@@ -141,6 +143,7 @@ const setupRoutes = async () => {
       
       // calendar routes
       app.use('/api/calendar', calendarRoutes);
+      app.use('/api/events', eventRoutes);
       //console.log('All routes mounted successfully');
       
       
