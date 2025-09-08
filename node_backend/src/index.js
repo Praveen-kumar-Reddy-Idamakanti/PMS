@@ -30,11 +30,16 @@ const leaveRequestsRoutes = require('./routes/leaveroutes/leaveRequests');
 const calendarRoutes = require('./routes/calendar.routes');
 const eventRoutes = require('./routes/event.routes.js');
 
+// holiday routes
+const holidayRoutes = require('./routes/holiday.routes');
+
 const app = express();
 
 // CORS configuration
 const corsOptions = {
   origin: [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
     'http://localhost:8080', 
     'http://127.0.0.1:8080',
     process.env.FRONTEND_URL,
@@ -144,6 +149,9 @@ const setupRoutes = async () => {
       // calendar routes
       app.use('/api/calendar', calendarRoutes);
       app.use('/api/events', eventRoutes);
+
+      // holiday routes
+      app.use('/api/holidays', holidayRoutes);
       //console.log('All routes mounted successfully');
       
       

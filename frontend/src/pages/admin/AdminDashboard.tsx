@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Settings, Activity, Clock, AlertCircle, Home, BarChart3 } from "lucide-react";
+import { Users, Settings, Activity, Clock, AlertCircle, Home, BarChart3, Calendar } from "lucide-react";
 import { UserManagement } from "./components/UserManagement";
 import { SystemSettings } from "./components/SystemSettings";
 import { ActivityLog } from "./components/ActivityLog";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { fetchWithAuth } from "@/lib/api";
 import { RemoteRequest } from "@/types/remoteRequest";
+import { AdminHolidaysPage } from "./AdminHolidaysPage";
 
 const TABS = [
   { id: 'users', label: 'Users', icon: Users, path: '/admin', description: 'Manage user accounts and permissions' },
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'activity', label: 'Activity Log', icon: Activity, path: '/admin/activity-logs', description: 'Monitor system activities' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/admin/settings', description: 'Configure system settings' },
   { id: 'requests', label: 'Requests', icon: AlertCircle, path: '/admin/requests', description: 'Manage pending requests' },
+  { id: 'holidays', label: 'Holidays', icon: Calendar, path: '/admin/holidays', description: 'Manage holidays' },
 ];
 
 export const AdminDashboard = () => {
@@ -84,6 +86,8 @@ export const AdminDashboard = () => {
         return <UserManagement />;
       case 'requests':
         return <AdminRequests />;
+      case 'holidays':
+        return <AdminHolidaysPage />;
     }
   };
 

@@ -117,20 +117,31 @@ const closeDB = () => {
  * @param {Array} params - Query parameters
  * @returns {Promise<Array>} The query results
  */
-const query = async (sql, params = []) => {
-    const db = getDB();
-    
-    // Log the query for debugging (without sensitive data)
-    const logParams = params.length > 0 ? ` [${params.map(p => typeof p === 'string' ? `'${p}'` : p).join(', ')}]` : '';
-    logger.debug(`SQL: ${sql}${logParams}`);
-    
+const query = (sql, params = []) => {
     return new Promise((resolve, reject) => {
-        db.all(sql, params, (err, rows) => {
-            if (err) {
-                logger.error('Query error:', { sql, params, error: err.message });
-                return reject(err);
-            }
-            resolve(rows || []);
+        console.log('📝 Executing query:', sql, 'with params:', params);
+        const startTime = Date.now();
+        db.serialize(() => {
+            db.all(sql, params, (err, rows) => {
+                const duration = Date.now() - startTime;
+                if (err) {
+                    console.error('❌ Query error:', {
+                        sql,
+                        params,
+                        error: err.message,
+                        duration: `${duration}ms`
+                    });
+                    return reject(err);
+                }
+                console.log('✅ Query successful:', {
+                    sql,
+                    params,
+                    rowCount: rows ? rows.length : 0,
+                    duration: `${duration}ms`,
+                    firstFewRows: rows ? rows.slice(0, 3) : []
+                });
+                resolve(rows || []);
+            });
         });
     });
 };
