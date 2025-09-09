@@ -1,8 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Snackbar, Alert, AlertColor } from '@mui/material';
-import { Add, Delete, Edit } from '@mui/icons-material';
-import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from 'date-fns';
+import { Plus, Trash2, Edit, Calendar as CalendarIcon } from 'lucide-react';
+import { LoadingGif } from "@/components/ui/LoadingGif";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
+import { holidayService } from "../../services/holiday.service";
 
 type HolidayType = 'public' | 'company' | 'optional';
 
@@ -17,20 +25,12 @@ interface Holiday {
 }
 
 const AdminHolidaysPage: React.FC = () => {
-  const { user } = useAuth();
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const [openDialog, setOpenDialog] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
-  const [snackbar, setSnackbar] = useState<{
-    open: boolean;
-    message: string;
-    severity: AlertColor;
-  }>({ 
-    open: false, 
-    message: '', 
-    severity: 'success' 
-  });
   
   const [formData, setFormData] = useState<{
     name: string;
@@ -42,50 +42,77 @@ const AdminHolidaysPage: React.FC = () => {
     type: 'public'
   });
 
-  useEffect(() => {
-    fetchHolidays();
-  }, []);
+  const { data: holidays = [], isLoading } = useQuery<Holiday[]>({
+    queryKey: ['holidays'],
+    queryFn: async () => {
+      const data = await holidayService.getHolidays();
+      return Array.isArray(data) ? data : [];
+    },
+  });
 
-  const fetchHolidays = async () => {
-    try {
-      setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      console.log('Fetching holidays from:', `${apiUrl}/holidays`);
-      
-      const response = await fetch(`${apiUrl}/holidays`, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+  const createMutation = useMutation({
+    mutationFn: (data: Omit<Holiday, 'id' | 'created_at' | 'updated_at'>) => 
+      holidayService.createHoliday(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['holidays'] });
+      setOpenDialog(false);
+      toast({
+        title: "Success",
+        description: "Holiday created successfully",
+        variant: "default",
       });
-      
-      const responseText = await response.text();
-      console.log('Raw response:', responseText);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch holidays: ${response.status} ${response.statusText}\n${responseText}`);
-      }
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-        console.log('Parsed holidays data:', data);
-      } catch (parseError) {
-        console.error('Failed to parse JSON:', parseError);
-        throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}...`);
-      }
-      
-      // Ensure we always have an array
-      const holidaysArray = Array.isArray(data) ? data : [];
-      console.log('Setting holidays:', holidaysArray);
-      setHolidays(holidaysArray);
-    } catch (error) {
-      console.error('Error fetching holidays:', error);
-      setSnackbar({ open: true, message: 'Failed to load holidays', severity: 'error' });
-    } finally {
-      setLoading(false);
+    },
+    onError: (error) => {
+      console.error('Error creating holiday:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create holiday",
+        variant: "destructive",
+      });
     }
-  };
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Holiday) => 
+      holidayService.updateHoliday(data.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['holidays'] });
+      setOpenDialog(false);
+      toast({
+        title: "Success",
+        description: "Holiday updated successfully",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      console.error('Error updating holiday:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update holiday",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => holidayService.deleteHoliday(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['holidays'] });
+      toast({
+        title: "Success",
+        description: "Holiday deleted successfully",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      console.error('Error deleting holiday:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete holiday",
+        variant: "destructive",
+      });
+    }
+  });
 
   const handleOpenDialog = (holiday: Holiday | null = null) => {
     if (holiday) {
@@ -121,193 +148,162 @@ const AdminHolidaysPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const url = editingHoliday 
-        ? `${apiUrl}/holidays/${editingHoliday.id}`
-        : `${apiUrl}/holidays`;
-      
-      const method = editingHoliday ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) throw new Error('Failed to save holiday');
-      
-      setSnackbar({ 
-        open: true, 
-        message: `Holiday ${editingHoliday ? 'updated' : 'added'} successfully`,
-        severity: 'success', 
-      });
-      
-      fetchHolidays();
-      handleCloseDialog();
-    } catch (error) {
-      console.error('Error saving holiday:', error);
-      setSnackbar({ 
-        open: true, 
-        message: `Failed to ${editingHoliday ? 'update' : 'add'} holiday`,
-        severity: 'error' 
-      });
+    if (editingHoliday) {
+      updateMutation.mutate({ ...formData, id: editingHoliday.id } as Holiday);
+    } else {
+      createMutation.mutate(formData as Omit<Holiday, 'id' | 'created_at' | 'updated_at'>)
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this holiday?')) return;
-    
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const response = await fetch(`${apiUrl}/holidays/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to delete holiday');
-      }
-      
-      setSnackbar({ 
-        open: true, 
-        message: 'Holiday deleted successfully',
-        severity: 'success' 
-      });
-      
-      fetchHolidays();
-    } catch (error) {
-      console.error('Error deleting holiday:', error);
-      setSnackbar({ 
-        open: true, 
-        message: error instanceof Error ? error.message : 'Failed to delete holiday',
-        severity: 'error' 
-      });
+  const handleDelete = (id: number) => {
+    if (window.confirm('Are you sure you want to delete this holiday?')) {
+      deleteMutation.mutate(id);
     }
   };
 
-  const handleCloseSnackbar = () => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  };
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (isLoading) {
+    return <LoadingGif text="Loading holidays..." />;
   }
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Holiday Management</Typography>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Holiday Management</h2>
         <Button 
-          variant="contained" 
-          color="primary" 
-          startIcon={<Add />}
-          onClick={() => handleOpenDialog()}
+          onClick={() => {
+            setEditingHoliday(null);
+            setFormData({ name: '', date: '', type: 'public' });
+            setOpenDialog(true);
+          }}
+          className="bg-orange-500 hover:bg-orange-600 text-white"
         >
+          <Plus className="h-4 w-4 mr-2" />
           Add Holiday
         </Button>
-      </Box>
+      </div>
 
-      <TableContainer component={Paper}>
+      <div className="rounded-md border">
         <Table>
-          <TableHead>
+          <TableHeader>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Date</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableHead>Name</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
-          </TableHead>
+          </TableHeader>
           <TableBody>
             {holidays.map((holiday) => (
               <TableRow key={holiday.id}>
-                <TableCell>{holiday.name}</TableCell>
-                <TableCell>{holiday.date ? format(new Date(holiday.date), 'MMM dd, yyyy') : 'Date not set'}</TableCell>
-                <TableCell>{holiday.type.charAt(0).toUpperCase() + holiday.type.slice(1)}</TableCell>
+                <TableCell className="font-medium">{holiday.name}</TableCell>
                 <TableCell>
-                  <IconButton onClick={() => handleOpenDialog(holiday)} color="primary">
-                    <Edit />
-                  </IconButton>
-                  <IconButton onClick={() => handleDelete(holiday.id)} color="error">
-                    <Delete />
-                  </IconButton>
+                  {holiday.date ? format(new Date(holiday.date), 'MMM dd, yyyy') : 'N/A'}
+                </TableCell>
+                <TableCell>
+                  <span className="capitalize">{holiday.type}</span>
+                </TableCell>
+                <TableCell>
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setEditingHoliday(holiday);
+                        setFormData({
+                          name: holiday.name,
+                          date: holiday.date,
+                          type: holiday.type
+                        });
+                        setOpenDialog(true);
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                      onClick={() => handleDelete(holiday.id)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </div>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <form onSubmit={handleSubmit}>
-          <DialogTitle>{editingHoliday ? 'Edit Holiday' : 'Add New Holiday'}</DialogTitle>
-          <DialogContent>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              label="Holiday Name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              label="Date"
-              name="date"
-              type="date"
-              InputLabelProps={{
-                shrink: true,
-              }}
-              value={formData.date}
-              onChange={handleInputChange}
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              select
-              label="Type"
-              name="type"
-              value={formData.type}
-              onChange={handleInputChange}
-            >
-              <MenuItem value="public">Public Holiday</MenuItem>
-              <MenuItem value="company">Company Holiday</MenuItem>
-              <MenuItem value="optional">Optional Holiday</MenuItem>
-            </TextField>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button type="submit" variant="contained" color="primary">
-              {editingHoliday ? 'Update' : 'Add'} Holiday
-            </Button>
-          </DialogActions>
-        </form>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{editingHoliday ? 'Edit Holiday' : 'Add New Holiday'}</DialogTitle>
+            <DialogDescription>
+              {editingHoliday ? 'Update the holiday details' : 'Fill in the details for the new holiday'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="name" className="text-sm font-medium">Holiday Name</label>
+              <Input
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                placeholder="Enter holiday name"
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="date" className="text-sm font-medium">Date</label>
+              <Input
+                id="date"
+                name="date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({...formData, date: e.target.value})}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="type" className="text-sm font-medium">Type</label>
+              <Select
+                value={formData.type}
+                onValueChange={(value) => setFormData({...formData, type: value as HolidayType})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="public">Public Holiday</SelectItem>
+                  <SelectItem value="company">Company Holiday</SelectItem>
+                  <SelectItem value="optional">Optional Holiday</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setOpenDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                {editingHoliday ? 'Update' : 'Add'} Holiday
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
       </Dialog>
-
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={6000} 
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+    </div>
   );
 };
 
