@@ -144,6 +144,62 @@ const initDatabase = async () => {
       throw new Error('Failed to create remote_attendance_requests table');
     }
 
+    // Create Tasks table
+    await run(`
+      CREATE TABLE IF NOT EXISTS Tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in-progress', 'review', 'completed')),
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+        assignedTo INTEGER,
+        assignedBy INTEGER,
+        dueDate DATETIME,
+        completedAt DATETIME,
+        progress INTEGER DEFAULT 0,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (assignedTo) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (assignedBy) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+
+    // Create SubTasks table
+    await run(`
+      CREATE TABLE IF NOT EXISTS SubTasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in-progress', 'completed')),
+        taskId INTEGER NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (taskId) REFERENCES Tasks(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create Tags table
+    await run(`
+      CREATE TABLE IF NOT EXISTS Tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create TaskTags join table
+    await run(`
+      CREATE TABLE IF NOT EXISTS TaskTags (
+        taskId INTEGER NOT NULL,
+        tagId INTEGER NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (taskId, tagId),
+        FOREIGN KEY (taskId) REFERENCES Tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (tagId) REFERENCES Tags(id) ON DELETE CASCADE
+      )
+    `);
+
     logger.info('✅ Database initialization completed successfully');
   } catch (error) {
     logger.error('❌ Failed to initialize database:', error);

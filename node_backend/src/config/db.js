@@ -166,6 +166,7 @@ const run = async (sql, params = []) => {
                 return reject(err);
             }
             resolve({ lastID: this.lastID, changes: this.changes });
+            logger.debug(`SQL Run successful: ${sql} | lastID: ${this.lastID}, changes: ${this.changes}`);
         });
     });
 };

@@ -1,3 +1,4 @@
+import taskService, { Task } from "../../services/task.service";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -17,31 +18,24 @@ import {
 } from "lucide-react";
 import { format, addDays, isAfter, isBefore } from "date-fns";
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'todo' | 'in-progress' | 'review' | 'completed';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  assignedTo: string;
-  assignedBy: string;
-  dueDate: string;
-  createdAt: string;
-  completedAt?: string;
-  progress: number;
-  tags: string[];
-}
-
 type FilterStatus = 'all' | 'todo' | 'in-progress' | 'review' | 'completed';
+
+import CreateTaskDialog from "@/components/tasks/CreateTaskDialog";
 
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
   const navigate = useNavigate();
 
+  const handleTaskCreated = (newTask: Task) => {
+    setTasks((prevTasks) => [newTask, ...prevTasks]);
+  };
+
   useEffect(() => {
-    // Load user data
     const userData = localStorage.getItem('user');
     if (!userData) {
       navigate('/login');
@@ -49,95 +43,21 @@ export default function Tasks() {
     }
     setUser(JSON.parse(userData));
 
-    // Generate mock task data
-    generateMockTasks();
-  }, [navigate]);
-
-  const generateMockTasks = () => {
-    const mockTasks: Task[] = [
-      {
-        id: '1',
-        title: 'Complete Project Proposal',
-        description: 'Draft and finalize the Q4 project proposal document including budget estimates and timeline.',
-        status: 'in-progress',
-        priority: 'high',
-        assignedTo: 'John Doe',
-        assignedBy: 'Sarah Manager',
-        dueDate: format(addDays(new Date(), 3), 'yyyy-MM-dd'),
-        createdAt: format(addDays(new Date(), -5), 'yyyy-MM-dd'),
-        progress: 65,
-        tags: ['Documentation', 'Planning']
-      },
-      {
-        id: '2',
-        title: 'Review API Documentation',
-        description: 'Review and provide feedback on the new REST API documentation.',
-        status: 'todo',
-        priority: 'medium',
-        assignedTo: 'John Doe',
-        assignedBy: 'Tech Lead',
-        dueDate: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
-        createdAt: format(addDays(new Date(), -2), 'yyyy-MM-dd'),
-        progress: 0,
-        tags: ['Review', 'API']
-      },
-      {
-        id: '3',
-        title: 'Update Team Dashboard',
-        description: 'Update the team dashboard with latest metrics and KPIs for monthly review.',
-        status: 'completed',
-        priority: 'low',
-        assignedTo: 'John Doe',
-        assignedBy: 'Sarah Manager',
-        dueDate: format(addDays(new Date(), -1), 'yyyy-MM-dd'),
-        createdAt: format(addDays(new Date(), -10), 'yyyy-MM-dd'),
-        completedAt: format(addDays(new Date(), -1), 'yyyy-MM-dd'),
-        progress: 100,
-        tags: ['Dashboard', 'Metrics']
-      },
-      {
-        id: '4',
-        title: 'Client Meeting Preparation',
-        description: 'Prepare presentation materials and agenda for upcoming client meeting.',
-        status: 'review',
-        priority: 'urgent',
-        assignedTo: 'John Doe',
-        assignedBy: 'Sarah Manager',
-        dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-        createdAt: format(addDays(new Date(), -3), 'yyyy-MM-dd'),
-        progress: 90,
-        tags: ['Meeting', 'Client']
-      },
-      {
-        id: '5',
-        title: 'Code Review - Authentication Module',
-        description: 'Review pull request for the new authentication module implementation.',
-        status: 'todo',
-        priority: 'high',
-        assignedTo: 'John Doe',
-        assignedBy: 'Tech Lead',
-        dueDate: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
-        createdAt: format(new Date(), 'yyyy-MM-dd'),
-        progress: 0,
-        tags: ['Code Review', 'Security']
-      },
-      {
-        id: '6',
-        title: 'Update Project Timeline',
-        description: 'Revise project timeline based on recent scope changes and resource allocation.',
-        status: 'in-progress',
-        priority: 'medium',
-        assignedTo: 'John Doe',
-        assignedBy: 'Project Manager',
-        dueDate: format(addDays(new Date(), 5), 'yyyy-MM-dd'),
-        createdAt: format(addDays(new Date(), -1), 'yyyy-MM-dd'),
-        progress: 30,
-        tags: ['Planning', 'Timeline']
+    const fetchTasks = async () => {
+      try {
+        setLoading(true);
+        const fetchedTasks = await taskService.getAllTasks();
+        setTasks(fetchedTasks);
+      } catch (err) {
+        console.error("Failed to fetch tasks:", err);
+        setError("Failed to load tasks. Please try again later.");
+      } finally {
+        setLoading(false);
       }
-    ];
+    };
 
-    setTasks(mockTasks);
-  };
+    fetchTasks();
+  }, [navigate]);
 
   const getStatusConfig = (status: Task['status']) => {
     switch (status) {
@@ -173,6 +93,14 @@ export default function Tasks() {
           icon: CheckCircle,
           label: 'Completed',
         };
+      default: // Fallback for any unhandled status, though TypeScript should prevent this if Task['status'] is exhaustive
+        return {
+          color: 'bg-muted',
+          textColor: 'text-muted-foreground',
+          borderColor: 'border-muted',
+          icon: Clock,
+          label: 'Unknown',
+        };
     }
   };
 
@@ -184,8 +112,6 @@ export default function Tasks() {
         return { color: 'text-status-info', bg: 'bg-status-info/20' };
       case 'high':
         return { color: 'text-status-warning', bg: 'bg-status-warning/20' };
-      case 'urgent':
-        return { color: 'text-status-critical', bg: 'bg-status-critical/20' };
     }
   };
 
@@ -207,8 +133,8 @@ export default function Tasks() {
   const taskStats = {
     total: tasks.length,
     todo: tasks.filter(t => t.status === 'todo').length,
-    inProgress: tasks.filter(t => t.status === 'in-progress').length,
     review: tasks.filter(t => t.status === 'review').length,
+    inProgress: tasks.filter(t => t.status === 'in-progress').length,
     completed: tasks.filter(t => t.status === 'completed').length,
     overdue: tasks.filter(t => isOverdue(t.dueDate)).length,
   };
@@ -239,13 +165,19 @@ export default function Tasks() {
               <Filter className="w-4 h-4 mr-2" />
               Filter
             </Button>
-            <Button variant="default" size="sm">
+            <Button variant="default" size="sm" onClick={() => setIsCreateTaskDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               New Task
             </Button>
           </div>
         </div>
       </header>
+
+      <CreateTaskDialog
+        isOpen={isCreateTaskDialogOpen}
+        onClose={() => setIsCreateTaskDialogOpen(false)}
+        onTaskCreated={handleTaskCreated}
+      />
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -256,6 +188,8 @@ export default function Tasks() {
               {([
                 { key: 'all', label: 'All', count: taskStats.total },
                 { key: 'todo', label: 'To Do', count: taskStats.todo },
+                { key: 'review', label: 'Review', count: taskStats.review },
+                { key: 'in-progress', label: 'In Progress', count: taskStats.inProgress },
                 { key: 'in-progress', label: 'In Progress', count: taskStats.inProgress },
                 { key: 'review', label: 'Review', count: taskStats.review },
                 { key: 'completed', label: 'Completed', count: taskStats.completed },
@@ -343,26 +277,15 @@ export default function Tasks() {
                       
                       <CardContent className="space-y-4">
                         {/* Progress */}
-                        {task.progress > 0 && (
-                          <div>
-                            <div className="flex justify-between text-sm mb-2">
-                              <span className="text-muted-foreground">Progress</span>
-                              <span className="text-foreground font-medium">{task.progress}%</span>
-                            </div>
-                            <Progress value={task.progress} className="h-2" />
-                          </div>
-                        )}
+                      {/* Removed task.progress as it's not in the service Task interface */}
 
                         {/* Meta Information */}
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center space-x-1">
-                            <User className="w-4 h-4" />
-                            <span>Assigned by {task.assignedBy}</span>
-                          </div>
+                          {/* Removed assignedBy as it's not in the service Task interface */}
                           <div className="flex items-center space-x-1">
                             <Calendar className="w-4 h-4" />
                             <span className={overdue ? 'text-status-critical font-medium' : dueSoon ? 'text-status-warning font-medium' : ''}>
-                              Due {format(new Date(task.dueDate), 'MMM dd, yyyy')}
+                              {task.dueDate ? `Due ${format(new Date(task.dueDate), 'MMM dd, yyyy')}` : 'No Due Date'}
                               {overdue && ' (Overdue)'}
                               {dueSoon && ' (Due Soon)'}
                             </span>
@@ -370,15 +293,15 @@ export default function Tasks() {
                         </div>
 
                         {/* Tags */}
-                        {task.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {task.tags.map((tag, index) => (
-                              <Badge key={index} variant="secondary" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
+                        {task.tags && task.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {task.tags.map((tag, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs">
+                              {tag.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                       </CardContent>
                     </Card>
                   );
@@ -412,12 +335,12 @@ export default function Tasks() {
                     <div className="text-xs text-muted-foreground">In Progress</div>
                   </div>
                   <div className="text-center p-3 bg-status-warning/10 rounded-lg">
-                    <div className="text-lg font-bold text-status-warning">{taskStats.review}</div>
-                    <div className="text-xs text-muted-foreground">Review</div>
+                    <div className="text-lg font-bold text-status-warning">{taskStats.pending}</div>
+                    <div className="text-xs text-muted-foreground">Pending</div>
                   </div>
-                  <div className="text-center p-3 bg-muted/10 rounded-lg">
-                    <div className="text-lg font-bold text-muted-foreground">{taskStats.todo}</div>
-                    <div className="text-xs text-muted-foreground">To Do</div>
+                  <div className="text-center p-3 bg-status-excellent/10 rounded-lg">
+                    <div className="text-lg font-bold text-status-excellent">{taskStats.completed}</div>
+                    <div className="text-xs text-muted-foreground">Completed</div>
                   </div>
                   <div className="text-center p-3 bg-status-critical/10 rounded-lg">
                     <div className="text-lg font-bold text-status-critical">{taskStats.overdue}</div>
