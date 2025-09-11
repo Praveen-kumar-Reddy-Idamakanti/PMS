@@ -76,9 +76,9 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false
       },
-      status: {
-        type: Sequelize.ENUM('todo', 'in-progress', 'completed'),
-        defaultValue: 'todo'
+      completed: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false
       },
       taskId: {
         type: Sequelize.INTEGER,

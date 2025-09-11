@@ -53,6 +53,8 @@ router.get('/:userId', auth, async (req, res) => {
                      AND d.date BETWEEN date(lr.start_date) AND date(lr.end_date) 
                      AND lr.status = 'approved' 
                      LIMIT 1),
+                    (SELECT 'task_due' FROM TaskCalendarEvents tce
+                     WHERE tce.userId = ? AND date(tce.dueDate) = d.date LIMIT 1), -- New: Task Due
                     (SELECT 'present' FROM attendance a 
                      WHERE a.user_id = ? 
                      AND date(datetime(a.timestamp, 'localtime')) = d.date 
@@ -75,6 +77,8 @@ router.get('/:userId', auth, async (req, res) => {
                  AND d.date BETWEEN date(lr.start_date) AND date(lr.end_date) 
                  AND lr.status = 'approved' 
                  LIMIT 1) as leave_reason,
+                (SELECT tce.title FROM TaskCalendarEvents tce WHERE tce.userId = ? AND date(tce.dueDate) = d.date LIMIT 1) as task_title, -- New: Task Title
+                (SELECT tce.description FROM TaskCalendarEvents tce WHERE tce.userId = ? AND date(tce.dueDate) = d.date LIMIT 1) as task_description, -- New: Task Description
                 (SELECT MIN(strftime('%H:%M', datetime(a.timestamp, 'localtime'))) 
                  FROM attendance a 
                  WHERE a.user_id = ? 
@@ -87,7 +91,7 @@ router.get('/:userId', auth, async (req, res) => {
                  AND a.type = 'checkout') as checkout_time
             FROM dates d
             ORDER BY d.date
-        `, [startDate, startDate, endDate, userId, userId, userId, userId, userId]);
+        `, [startDate, startDate, endDate, userId, userId, userId, userId, userId, userId, userId, userId]);
 
         // Debug: log absent days in backend
         const absentDays = calendarData.filter(d => d.status === 'absent');

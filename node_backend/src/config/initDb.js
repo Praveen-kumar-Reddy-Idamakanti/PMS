@@ -169,11 +169,15 @@ const initDatabase = async () => {
       CREATE TABLE IF NOT EXISTS SubTasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in-progress', 'completed')),
+        completed BOOLEAN NOT NULL DEFAULT FALSE,
         taskId INTEGER NOT NULL,
+        assignedTo INTEGER, -- New column
+        assignedBy INTEGER, -- New column
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (taskId) REFERENCES Tasks(id) ON DELETE CASCADE
+        FOREIGN KEY (taskId) REFERENCES Tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (assignedTo) REFERENCES users(id) ON DELETE SET NULL, -- Foreign key
+        FOREIGN KEY (assignedBy) REFERENCES users(id) ON DELETE SET NULL  -- Foreign key
       )
     `);
 

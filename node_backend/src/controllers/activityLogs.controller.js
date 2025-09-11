@@ -18,13 +18,15 @@ const getActivityLogs = async (req, res, next) => {
       startDate, 
       endDate,
       sortBy = 'created_at',
-      sortOrder = 'DESC'
+      sortOrder = 'DESC',
+      search
     } = req.query;
 
+    // Call the static findAll method directly on the class
     const result = await ActivityLog.findAll({
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
-      action,
+      activityType: action,
       userId,
       startDate,
       endDate,
@@ -32,12 +34,10 @@ const getActivityLogs = async (req, res, next) => {
       sortOrder
     });
 
-    // Logs already have user details from the model
-    const logsWithUserDetails = result.data.map(log => log.toJSON());
-
+    // The model's findAll already returns properly formatted data
     res.json({
       success: true,
-      data: logsWithUserDetails,
+      data: result.data,
       pagination: result.pagination
     });
   } catch (error) {

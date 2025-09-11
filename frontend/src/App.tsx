@@ -25,6 +25,7 @@ import EventDetails from "./pages/main_pages/events/EventDetails";
 import CreateEvent from "./pages/main_pages/events/CreateEvent";
 import EventHistory from "./pages/main_pages/events/EventHistory";
 import EditEvent from "./pages/main_pages/events/EditEvent";
+import TaskDetailPage from "./pages/main_pages/TaskDetailPage";
 
 // Debug component to log route changes and auth state
 const DebugRouter = () => {
@@ -94,6 +95,11 @@ const App = () => {
               <Route path="/tasks" element={
                 <MainLayout>
                   <Tasks />
+                </MainLayout>
+              } />
+              <Route path="/tasks/:taskId" element={ // New Route for TaskDetailPage
+                <MainLayout>
+                  <TaskDetailPage />
                 </MainLayout>
               } />
               <Route path="/requests" element={

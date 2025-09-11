@@ -13,13 +13,21 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false,
     },
-    status: {
-      type: DataTypes.ENUM('todo', 'in-progress', 'completed'),
-      defaultValue: 'todo',
+    completed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
     taskId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    assignedTo: { // New field
+      type: DataTypes.INTEGER,
+      allowNull: true, // Can be null if unassigned
+    },
+    assignedBy: { // New field
+      type: DataTypes.INTEGER,
+      allowNull: true, // Can be null if unassigned
     },
   }, {
     sequelize,

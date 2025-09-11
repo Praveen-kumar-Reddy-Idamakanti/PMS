@@ -1,15 +1,19 @@
 // src/services/calendarService.ts
-import axios from "axios";
+import { fetchWithAuth } from "../lib/api"; // Using fetchWithAuth
 
 const API_BASE_URL = import.meta.env.VITE_API_URL; // adjust if needed
 
 export interface CalendarDay {
   date: string;
-  status: "present" | "absent" | "leave" | "holiday" | "future" | null;
+  status: "present" | "absent" | "leave" | "holiday" | "future" | "task_due" | null;
   holiday_name?: string | null;
   leave_reason?: string | null;
+  task_id?: string | number | null;
+  task_title?: string | null;
+  task_description?: string | null;
   checkin_time?: string | null;
   checkout_time?: string | null;
+  type?: 'attendance' | 'task';
 }
 
 export interface DateDetail {
@@ -27,11 +31,10 @@ export async function fetchMonthlyCalendar(
   month: string,
   token: string
 ): Promise<CalendarDay[]> {
-  const res = await axios.get(`${API_BASE_URL}/calendar/${userId}`, {
-    params: { month },
+  const res = await fetchWithAuth(`/calendar/${userId}?month=${month}`, { // Using fetchWithAuth
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.data;
+  return res.json(); // fetchWithAuth returns Response object, need to parse JSON
 }
 
 export async function fetchDateDetails(
@@ -39,8 +42,82 @@ export async function fetchDateDetails(
   date: string,
   token: string
 ): Promise<DateDetail> {
-  const res = await axios.get(`${API_BASE_URL}/calendar/${userId}/${date}`, {
+  const res = await fetchWithAuth(`/calendar/${userId}/${date}`, { // Using fetchWithAuth
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.data;
+  return res.json(); // fetchWithAuth returns Response object, need to parse JSON
+}
+
+// Fetch tasks for a specific month
+export async function fetchTasksForMonth(userId: number, month: string, token: string): Promise<CalendarDay[]> {
+  try {
+    // Get all tasks and filter by month
+    const response = await fetchWithAuth(`/tasks`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch tasks');
+    }
+
+    const tasks = await response.json();
+    
+    // Filter tasks for the requested month and convert to calendar events
+    return tasks
+      .filter((task: any) => {
+        if (!task.dueDate) return false;
+        const taskMonth = new Date(task.dueDate).toISOString().slice(0, 7);
+        return taskMonth === month;
+      })
+      .map((task: any) => ({
+        date: task.dueDate.split('T')[0], // Extract just the date part
+        status: 'task_due' as const,
+        task_title: task.title,
+        task_description: task.description,
+        type: 'task' as const
+      }));
+  } catch (error) {
+    console.error('Error fetching task calendar events:', error);
+    return [];
+  }
+}
+
+export async function createTaskCalendarEvent(
+  taskEvent: { taskId: number; userId: number; title: string; description?: string; dueDate: string },
+  token: string
+): Promise<any> {
+  try {
+    if (!taskEvent.taskId || !taskEvent.title || !taskEvent.dueDate) {
+      throw new Error('Task ID, title, and due date are required');
+    }
+
+    if (!token) {
+      throw new Error('Authentication token is required');
+    }
+
+    const response = await fetchWithAuth(`/task-calendar-events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        taskId: taskEvent.taskId,
+        userId: taskEvent.userId,
+        title: taskEvent.title,
+        description: taskEvent.description,
+        dueDate: taskEvent.dueDate
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to create calendar event');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error in createTaskCalendarEvent:', error);
+    throw error; // Re-throw to be handled by the caller
+  }
 }

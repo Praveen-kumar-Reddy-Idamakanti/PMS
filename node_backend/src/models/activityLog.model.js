@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 
 // Activity types that map to activity_type in the database
 const ACTIVITY_TYPES = {
+  // User related
   USER_LOGIN: 'USER_LOGIN',
   USER_LOGOUT: 'USER_LOGOUT',
   USER_CHECKIN: 'USER_CHECKIN',
@@ -10,6 +11,19 @@ const ACTIVITY_TYPES = {
   USER_CREATE: 'USER_CREATE',
   USER_UPDATE: 'USER_UPDATE',
   USER_DELETE: 'USER_DELETE',
+  
+  // Task related
+  TASK_CREATE: 'TASK_CREATE',
+  TASK_UPDATE: 'TASK_UPDATE',
+  TASK_DELETE: 'TASK_DELETE',
+  TASK_COMPLETE: 'TASK_COMPLETE',
+  TASK_ASSIGN: 'TASK_ASSIGN',
+  SUBTASK_CREATE: 'SUBTASK_CREATE',
+  SUBTASK_UPDATE: 'SUBTASK_UPDATE',
+  SUBTASK_DELETE: 'SUBTASK_DELETE',
+  SUBTASK_COMPLETE: 'SUBTASK_COMPLETE',
+  
+  // System
   ATTENDANCE_UPDATE: 'ATTENDANCE_UPDATE',
   SETTINGS_UPDATE: 'SETTINGS_UPDATE',
   PASSWORD_CHANGE: 'PASSWORD_CHANGE',
@@ -126,11 +140,11 @@ class ActivityLog {
   static async findAll({ 
     page = 1, 
     limit = 10, 
-    activityType, 
+    action, 
     userId, 
     startDate, 
     endDate, 
-    sortBy = 'created_at', 
+    sortBy = 'createdAt', 
     sortOrder = 'DESC' 
   } = {}) {
     try {
@@ -138,23 +152,23 @@ class ActivityLog {
       const whereClauses = [];
       const params = [];
       
-      if (activityType) {
-        whereClauses.push('activity_type = ?');
-        params.push(activityType);
+      if (action) {
+        whereClauses.push('action = ?');
+        params.push(action);
       }
       
       if (userId) {
-        whereClauses.push('user_id = ?');
+        whereClauses.push('userId = ?');
         params.push(userId);
       }
       
       if (startDate) {
-        whereClauses.push('created_at >= ?');
+        whereClauses.push('createdAt >= ?');
         params.push(new Date(startDate).toISOString());
       }
       
       if (endDate) {
-        whereClauses.push('created_at <= ?');
+        whereClauses.push('createdAt <= ?');
         params.push(new Date(endDate).toISOString());
       }
       
@@ -162,44 +176,60 @@ class ActivityLog {
       
       // Get total count
       const countResult = await query(
-        `SELECT COUNT(*) as total FROM user_activity ${whereClause}`, 
+        `SELECT COUNT(*) as total FROM ActivityLogs ${whereClause}`, 
         params
       );
       const total = countResult ? countResult.total : 0;
       
       // Validate sort column to prevent SQL injection
-      const validSortColumns = ['id', 'user_id', 'activity_type', 'created_at'];
-      const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+      const validSortColumns = ['id', 'userId', 'action', 'createdAt'];
+      const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'createdAt';
       const sortDirection = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       
       // Get paginated results with user details
       const rows = await query(
         `SELECT 
-          ua.*, 
+          al.*, 
           u.name as user_name, 
           u.email as user_email,
           u.role as user_role
-        FROM user_activity ua
-        LEFT JOIN users u ON ua.user_id = u.id
+        FROM ActivityLogs al
+        LEFT JOIN Users u ON al.userId = u.id
         ${whereClause} 
-        ORDER BY ua.${sortColumn} ${sortDirection}
+        ORDER BY al.${sortColumn} ${sortDirection}
         LIMIT ? OFFSET ?`,
         [...params, limit, offset]
       );
 
       // Process rows to include user details in the response
-      const processedRows = rows.map(row => ({
-        ...row,
-        user: row.user_id ? {
-          id: row.user_id,
-          name: row.user_name,
-          email: row.user_email,
-          role: row.user_role || 'member'  // Default to 'member' if role is not set
-        } : null
-      }));
+      const processedRows = rows.map(row => {
+        const log = new ActivityLog({
+          id: row.id,
+          user_id: row.userId,
+          activity_type: row.action,
+          details: {
+            description: row.description,
+            oldValue: row.oldValue,
+            newValue: row.newValue
+          },
+          created_at: row.createdAt
+        });
+        
+        // Add user details if available
+        if (row.userId) {
+          log.user = {
+            id: row.userId,
+            name: row.user_name,
+            email: row.user_email,
+            role: row.user_role || 'member'
+          };
+        }
+        
+        return log;
+      });
       
       return {
-        data: Array.isArray(rows) ? processedRows.map(row => new ActivityLog(row)) : [],
+        data: processedRows,
         pagination: {
           total: parseInt(total, 10),
           page: parseInt(page, 10),
@@ -234,4 +264,8 @@ class ActivityLog {
   }
 }
 
+// Attach static methods to the class
+ActivityLog.ACTIVITY_TYPES = ACTIVITY_TYPES;
+
+// Export the class
 module.exports = ActivityLog;

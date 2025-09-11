@@ -34,6 +34,7 @@ const eventRoutes = require('./routes/event.routes.js');
 const holidayRoutes = require('./routes/holiday.routes');
 const taskRoutes = require('./routes/task.routes');
 const userRoutes = require('./routes/user.routes');
+const taskCalendarRoutes = require('./routes/taskCalendar.routes'); // New route import
 
 const app = express();
 
@@ -156,6 +157,7 @@ const setupRoutes = async () => {
       app.use('/api/holidays', holidayRoutes);
       app.use('/api/tasks', taskRoutes);
       app.use('/api/users', userRoutes);
+      app.use('/api/task-calendar-events', taskCalendarRoutes); // Mount new task calendar routes
       //console.log('All routes mounted successfully');
       
       

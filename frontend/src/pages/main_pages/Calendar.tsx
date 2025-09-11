@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle, XCircle, Clock, Plane } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Clock, Plane, ClipboardList } from "lucide-react"; // Added ClipboardList
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { format, addMonths, subMonths, getDay } from "date-fns";
+import { format, addMonths, subMonths, getDay, isSameDay } from "date-fns";
 import {
   fetchMonthlyCalendar,
   fetchDateDetails,
+  fetchTasksForMonth,
   CalendarDay,
   DateDetail,
 } from "@/services/calender.service";
@@ -20,79 +21,124 @@ import DateDetails from "@/components/calender/DateDetails";
 export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [records, setRecords] = useState<CalendarDay[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [details, setDetails] = useState<DateDetail | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const userId = user?.id;
   const token = localStorage.getItem("token") || "";
 
+  // Fetch both attendance and task due dates
   useEffect(() => {
     const fetchData = async () => {
       if (!userId) return; // Don't fetch if no user
       try {
         const month = format(currentDate, "yyyy-MM");
-        console.log(`[DEBUG][Frontend] Requesting calendar for userId=${userId}, month=${month}`);
-        const data = await fetchMonthlyCalendar(parseInt(userId), month, token);
-        console.log(`[DEBUG][Frontend] Response:`, data);
+        console.log(`[DEBUG][Frontend] Requesting calendar data for userId=${userId}, month=${month}`);
+        
+        // Fetch both attendance and task data in parallel
+        const [attendanceData, tasksData] = await Promise.all([
+          fetchMonthlyCalendar(parseInt(userId), month, token),
+          fetchTasksForMonth(parseInt(userId), month, token)
+        ]);
 
-        const processedData = data.map((day): CalendarDay => {
-          // The date string is in 'YYYY-MM-DD' format.
-          // new Date('YYYY-MM-DD') can have timezone issues.
-          // A safer way to parse it without timezone shifts is to split it.
-          const [year, month, dayOfMonth] = day.date.split('-').map(Number);
-          const date = new Date(year, month - 1, dayOfMonth);
-          
-          if (getDay(date) === 0) { // 0 is Sunday
-            return { ...day, status: 'holiday', holiday_name: 'Sunday' };
-          }
-          return day;
-        });
+        // Process attendance data
+        const processedAttendance = attendanceData.map((day): CalendarDay => ({
+          ...day,
+          date: day.date,
+          type: 'attendance' as const,
+          // Mark Sundays as holidays
+          ...(getDay(new Date(day.date)) === 0 
+            ? { status: 'holiday' as const, holiday_name: 'Sunday' } 
+            : {})
+        }));
 
-        setRecords(processedData);
-        // Debug: log all status counts and days
-        const absentDays = processedData.filter(d => d.status === "absent");
-        const presentDays = processedData.filter(d => d.status === "present");
-        const leaveDays = processedData.filter(d => d.status === "leave");
-        const holidayDays = processedData.filter(d => d.status === "holiday");
-        console.log(`[DEBUG][Frontend] Calendar for ${month}:`);
-        console.log(`  Present: ${presentDays.length} days`, presentDays.map(d => d.date));
-        console.log(`  Absent: ${absentDays.length} days`, absentDays.map(d => d.date));
-        console.log(`  Leave: ${leaveDays.length} days`, leaveDays.map(d => d.date));
-        console.log(`  Holiday: ${holidayDays.length} days`, holidayDays.map(d => d.date));
+        // Combine attendance and task data
+        const combinedData = [
+          ...processedAttendance,
+          ...tasksData
+        ];
+
+        setRecords(combinedData);
+        
+        // Debug: log all status counts
+        const statusCounts = combinedData.reduce((acc, day) => {
+          acc[day.status || 'unknown'] = (acc[day.status || 'unknown'] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        
+        console.log(`[DEBUG][Frontend] Calendar for ${month}:`, statusCounts);
       } catch (err) {
-        console.error("Failed to fetch calendar:", err);
+        console.error("Failed to fetch calendar data:", err);
       }
     };
+    
     fetchData();
   }, [currentDate, userId, token]);
 
-  useEffect(() => {
-    if (!selectedDate) return;
-    const fetchDetailsData = async () => {
+  const handleDateSelect = (date: Date) => {
+    // Toggle selection if clicking the same date
+    if (isSameDay(date, selectedDate)) {
+      // Only clear if clicking the same date again
+      setSelectedDate(new Date());
+      setDetails(null);
+      return;
+    }
+    
+    // Select the new date
+    setSelectedDate(date);
+    
+    // Fetch details for the selected date
+    const fetchDetails = async () => {
+      if (!userId) return;
       try {
-        const dateStr = format(selectedDate, "yyyy-MM-dd");
-        const res = await fetchDateDetails(parseInt(userId) , dateStr, token);
-        setDetails(res);
-      } catch (err) {
-        console.error("Failed to fetch date details:", err);
+        const dateStr = format(date, "yyyy-MM-dd");
+        const details = await fetchDateDetails(parseInt(userId), dateStr, token);
+        setDetails(details);
+      } catch (error) {
+        console.error("Error fetching date details:", error);
       }
     };
-    fetchDetailsData();
-  }, [selectedDate, userId, token]);
+    fetchDetails();
+  };
 
-  const getStatusConfig = (status: CalendarDay["status"] | DateDetail["type"]) => {
+  const getStatusConfig = (status: CalendarDay["status"] | DateDetail["type"] | string) => {
     switch (status) {
       case "present":
-        return { color: "bg-status-excellent", textColor: "text-status-excellent", icon: CheckCircle, label: "Present" };
+        return { 
+          color: "bg-green-100", 
+          textColor: "text-green-800", 
+          icon: CheckCircle, 
+          label: "Present" 
+        };
       case "absent":
-        return { color: "bg-status-critical", textColor: "text-status-critical", icon: XCircle, label: "Absent" };
+        return { 
+          color: "bg-red-100", 
+          textColor: "text-red-800", 
+          icon: XCircle, 
+          label: "Absent" 
+        };
       case "leave":
-        return { color: "bg-status-warning", textColor: "text-status-warning", icon: Plane, label: "Leave" };
+        return { 
+          color: "bg-yellow-100", 
+          textColor: "text-yellow-800", 
+          icon: Plane, 
+          label: "Leave" 
+        };
       case "holiday":
-        return { color: "bg-muted", textColor: "text-muted-foreground", icon: Clock, label: "Holiday" };
-      case "future":
-        return { color: "bg-yellow-200", textColor: "text-yellow-800", icon: Clock, label: "Future" };
+        return { 
+          color: "bg-purple-100", 
+          textColor: "text-purple-800", 
+          icon: Clock, 
+          label: "Holiday" 
+        };
+      case "task_due":
+        return { 
+          color: "bg-blue-100", 
+          textColor: "text-blue-800", 
+          icon: ClipboardList, 
+          label: "Task Due" 
+        };
       default:
         return null;
     }
@@ -136,13 +182,15 @@ export default function Calendar() {
                 <CardDescription>Click a date to view details</CardDescription>
               </CardHeader>
               <CardContent>
-                <CalendarGrid
-                  currentDate={currentDate}
-                  records={records}
-                  selectedDate={selectedDate}
-                  onSelectDate={setSelectedDate}
-                  getStatusConfig={getStatusConfig}
-                />
+                <div className="border rounded-lg p-4 bg-background">
+                  <CalendarGrid
+                    currentDate={currentDate}
+                    records={records}
+                    selectedDate={selectedDate}
+                    onSelectDate={handleDateSelect}
+                    getStatusConfig={getStatusConfig}
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>

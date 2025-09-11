@@ -13,7 +13,7 @@ router.delete('/:id', authenticate, taskController.deleteTask);
 
 // Subtask Routes
 router.post('/:taskId/subtasks', authenticate, taskController.createSubtask);
-router.put('/subtasks/:id', authenticate, taskController.updateSubtask);
-router.delete('/subtasks/:id', authenticate, taskController.deleteSubtask);
+router.put('/:taskId/subtasks/:subtaskId', authenticate, taskController.updateSubtask);
+router.delete('/:taskId/subtasks/:subtaskId', authenticate, taskController.deleteSubtask);
 
 module.exports = router;

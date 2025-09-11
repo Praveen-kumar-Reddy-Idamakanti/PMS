@@ -9,17 +9,38 @@ export interface Task {
   priority: 'low' | 'medium' | 'high';
   tags?: Tag[];
   subtasks?: Subtask[];
+  assignedTo?: number;
+  assignedBy?: number;
 }
 
 export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+  assignedTo?: number;
+  assignedBy?: number;
+  completedBy?: number;
+  completedAt?: string;
+  completionDescription?: string; // New field
 }
 
 export interface Tag {
   id: string;
   name: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  userId: number;
+  activityType: string;
+  details: Record<string, any>;
+  timestamp: string;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
 }
 
 const taskService = {
@@ -57,6 +78,7 @@ const taskService = {
 
   // Subtask operations
   createSubtask: async (taskId: string, subtask: Omit<Subtask, 'id'>): Promise<Subtask> => {
+    console.log("createSubtask",taskId, subtask);
     const response = await fetchWithAuth(`/tasks/${taskId}/subtasks`, {
       method: 'POST',
       body: JSON.stringify(subtask),
@@ -65,6 +87,7 @@ const taskService = {
   },
 
   updateSubtask: async (taskId: string, subtaskId: string, subtask: Partial<Subtask>): Promise<Subtask> => {
+    console.log("updateSubtask",taskId, subtaskId, subtask);
     const response = await fetchWithAuth(`/tasks/${taskId}/subtasks/${subtaskId}`, {
       method: 'PUT',
       body: JSON.stringify(subtask),
@@ -91,6 +114,22 @@ const taskService = {
     const response = await fetchWithAuth(`/tasks/${taskId}/tags/${tagId}`, {
       method: 'DELETE',
     });
+    return response.json();
+  },
+
+  // Activity Logs
+  getActivityLogs: async (taskId: string): Promise<ActivityLog[]> => {
+    const response = await fetchWithAuth(`/tasks/${taskId}/activity-logs`);
+    return response.json();
+  },
+
+  getRecentActivity: async (limit: number = 10): Promise<ActivityLog[]> => {
+    const response = await fetchWithAuth(`/activity-logs?limit=${limit}`);
+    return response.json();
+  },
+
+  getUserActivity: async (userId: string, limit: number = 10): Promise<ActivityLog[]> => {
+    const response = await fetchWithAuth(`/users/${userId}/activity-logs?limit=${limit}`);
     return response.json();
   },
 };

@@ -1,0 +1,105 @@
+// ... (previous imports remain the same)
+
+export default function Tasks() {
+  // ... (previous state and functions remain the same)
+
+  return (
+    <div className="container mx-auto py-6 px-4">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-3xl font-bold tracking-tight">Tasks</h2>
+          <div className="flex items-center space-x-2">
+            <Button onClick={() => setIsCreateTaskDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Task
+            </Button>
+          </div>
+        </div>
+        
+        {/* Main Content with 75/25 split */}
+        <div className="grid gap-6 md:grid-cols-4">
+          {/* Tasks Section (75% width) */}
+          <div className="md:col-span-3">
+            <Tabs defaultValue="overview">
+              <TabsContent value="overview" className="space-y-4">
+                {/* Filter Tabs */}
+                <div className="max-w-xl">
+                  <div className="flex space-x-1 p-1 bg-muted rounded-lg w-full justify-between">
+                    {[
+                      { key: 'all' as const, label: 'All', count: taskStats.total },
+                      { key: 'todo' as const, label: 'To Do', count: taskStats.todo },
+                      { key: 'in-progress' as const, label: 'In Progress', count: taskStats.inProgress },
+                      { key: 'review' as const, label: 'Review', count: taskStats.review },
+                      { key: 'completed' as const, label: 'Completed', count: taskStats.completed },
+                    ].map(({ key, label, count }) => (
+                      <Button
+                        key={key}
+                        variant={filterStatus === key ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setFilterStatus(key)}
+                        className="relative flex-1"
+                      >
+                        {label}
+                        {count > 0 && (
+                          <Badge variant="secondary" className="ml-2 text-xs">
+                            {count}
+                          </Badge>
+                        )}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tasks List */}
+                <div className="space-y-4">
+                  {filteredTasks.length === 0 ? (
+                    <Card className="shadow-soft">
+                      <CardContent className="py-12 text-center">
+                        <CheckCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-foreground mb-2">
+                          No tasks found
+                        </h3>
+                        <p className="text-muted-foreground">
+                          {filterStatus === 'all' 
+                            ? "You don't have any tasks assigned yet." 
+                            : `No tasks with status "${filterStatus}".`
+                          }
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    filteredTasks.map((task) => (
+                      <TaskCard 
+                        key={task.id} 
+                        task={task} 
+                        onClick={() => navigate(`/tasks/${task.id}`)}
+                      />
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+          
+          {/* Stats Section (25% width) */}
+          <div className="md:col-span-1 space-y-6">
+            <TaskStatusSummary 
+              todo={taskStats.todo}
+              inProgress={taskStats.inProgress}
+              review={taskStats.review}
+              completed={taskStats.completed}
+              totalTasks={taskStats.total}
+            />
+          </div>
+        </div>
+      </div>
+      
+      <CreateTaskDialog 
+        open={isCreateTaskDialogOpen} 
+        onOpenChange={setIsCreateTaskDialogOpen}
+        onTaskCreated={handleTaskCreated}
+      />
+    </div>
+  );
+}

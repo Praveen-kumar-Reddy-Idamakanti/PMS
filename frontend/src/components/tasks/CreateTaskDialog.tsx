@@ -104,7 +104,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({ isOpen, onClose, on
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[650px] rounded-lg shadow-lg">
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
         </DialogHeader>
@@ -151,9 +151,9 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({ isOpen, onClose, on
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
