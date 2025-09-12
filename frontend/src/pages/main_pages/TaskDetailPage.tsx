@@ -33,8 +33,7 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
 
   // Subtask states
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [newSubtaskAssignedTo, setNewSubtaskAssignedTo] = useState<number | null>(null); // New state
-  const [newSubtaskAssignedBy, setNewSubtaskAssignedBy] = useState<number | null>(null); // New state
+  const [newSubtaskAssignedTo, setNewSubtaskAssignedTo] = useState<number | null>(null);
   const [completionDescriptionInput, setCompletionDescriptionInput] = useState<{ [key: string]: string }>({}); // State to hold completion descriptions
   const [expandedSubtasks, setExpandedSubtasks] = useState<Set<string>>(new Set()); // New state for collapsible subtasks
 
@@ -46,8 +45,27 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [canModifyTask, setCanModifyTask] = useState<boolean>(false);
 
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  // Fetch users separately to ensure they're always loaded
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUsers = async () => {
+      try {
+        const fetchedUsers = await userService.getAllUsers();
+        setUsers(fetchedUsers);
+      } catch (err) {
+        console.error('Error fetching users:', err);
+      } finally {
+        setUsersLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
+
+  // Fetch task data
+  useEffect(() => {
+    const fetchTask = async () => {
       if (!taskId) {
         setError('Task ID not provided.');
         return;
@@ -56,24 +74,20 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
       setLoading(true);
       setError(null);
       try {
-        const [fetchedTask, fetchedUsers] = await Promise.all([
-          taskService.getTaskById(taskId),
-          userService.getAllUsers(),
-        ]);
+        const fetchedTask = await taskService.getTaskById(taskId);
         setTask(fetchedTask);
-        setEditedTask(fetchedTask); // Initialize editedTask with fetched data
-        setUsers(fetchedUsers);
-        console.log("Fetched Task Object:", fetchedTask); // Debug log
+        setEditedTask(fetchedTask);
+        console.log("Fetched Task Object:", fetchedTask);
       } catch (err: any) {
-        console.error('Error fetching task or users:', err);
+        console.error('Error fetching task:', err);
         setError(err.message || 'Failed to load task details.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData(); // Call fetchData directly
-  }, [taskId]); // Dependency on taskId
+    fetchTask();
+  }, [taskId]); // Only re-run when taskId changes
 
   // Helpers to read current user id safely
   const getCurrentUserIdFromStorage = (): number | null => {
@@ -93,13 +107,30 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
   const canModifySubtask = (subtask: Subtask): boolean => {
     if (!currentUserId) return false;
     
+    // Convert all IDs to numbers for comparison to handle string/number mismatches
+    const currentUserNumId = Number(currentUserId);
+    const subtaskAssignedTo = subtask.assignedTo ? Number(subtask.assignedTo) : null;
+    const subtaskAssignedBy = subtask.assignedBy ? Number(subtask.assignedBy) : null;
+    const taskAssignedBy = task?.assignedBy ? Number(task.assignedBy) : null;
+    
     // User can modify if they are:
     // 1. The assignee of the subtask
     // 2. The assigner of the subtask
     // 3. The assigner of the main task
-    const isSubtaskAssignee = subtask.assignedTo === currentUserId;
-    const isSubtaskAssigner = subtask.assignedBy === currentUserId;
-    const isTaskAssigner = task?.assignedBy === currentUserId;
+    const isSubtaskAssignee = subtaskAssignedTo === currentUserNumId;
+    const isSubtaskAssigner = subtaskAssignedBy === currentUserNumId;
+    const isTaskAssigner = taskAssignedBy === currentUserNumId;
+    
+    // Log for debugging
+    console.log('Permission check:', {
+      currentUserNumId,
+      subtaskAssignedTo,
+      subtaskAssignedBy,
+      taskAssignedBy,
+      isSubtaskAssignee,
+      isSubtaskAssigner,
+      isTaskAssigner
+    });
     
     // Allow subtask assignee, subtask assigner, or task assigner to modify
     return isSubtaskAssignee || isSubtaskAssigner || isTaskAssigner;
@@ -179,18 +210,21 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
 
     setLoading(true);
     setError(null);
+    
+    // Get current user info
+    const currentUserData = localStorage.getItem('user');
+    const currentUser = currentUserData ? JSON.parse(currentUserData) : null;
+    
     try {
       const newSubtask = await taskService.createSubtask(taskId, {
         title: newSubtaskTitle,
         completed: false,
-        assignedTo: newSubtaskAssignedTo || undefined, // Pass if selected
-        assignedBy: newSubtaskAssignedBy || undefined, // Pass if selected
+        assignedTo: newSubtaskAssignedTo || undefined // Pass if selected
       });
       setTask(prev => prev ? { ...prev, subtasks: [...(prev.subtasks || []), newSubtask] } : null);
       setEditedTask(prev => prev ? { ...prev, subtasks: [...(prev.subtasks || []), newSubtask] } : null); // Update editedTask
       setNewSubtaskTitle('');
       setNewSubtaskAssignedTo(null); // Reset
-      setNewSubtaskAssignedBy(null); // Reset
     } catch (err: any) {
       console.error('Error creating subtask:', err);
       setError(err.message || 'Failed to add subtask.');
@@ -200,7 +234,14 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
   };
 
   const handleUpdateSubtaskField = async (subtaskId: string, fieldsToUpdate: Partial<Subtask>) => {
-    if (!taskId || !canModifyTask) return;
+    if (!taskId) return;
+    
+    // Find the subtask to check permissions
+    const subtaskToUpdate = task?.subtasks?.find(st => st.id === subtaskId);
+    if (!subtaskToUpdate || !canModifySubtask(subtaskToUpdate)) {
+      setError('You are not authorized to modify this subtask');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -258,7 +299,14 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
   };
 
   const handleDeleteSubtask = async (subtaskId: string) => {
-    if (!taskId || !canModifyTask) return;
+    if (!taskId) return;
+    
+    // Find the subtask to check permissions
+    const subtaskToUpdate = task?.subtasks?.find(st => st.id === subtaskId);
+    if (!subtaskToUpdate || !canModifySubtask(subtaskToUpdate)) {
+      setError('You are not authorized to delete this subtask');
+      return;
+    }
 
     if (!window.confirm('Are you sure you want to delete this subtask?')) {
       return;
@@ -575,9 +623,22 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
                           </TooltipProvider>
                         )}
                         {isEditing && canModifyTask && (
-                          <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteSubtask(subtask.id); }}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSubtask(subtask.id); }}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600" />
+                                <span className="sr-only">Delete subtask</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete subtask</p>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                         {/* Make the icon itself clickable for expand/collapse */}
                         <Button variant="ghost" size="icon" onClick={() => {
@@ -603,11 +664,8 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
                       <>
                         {(subtask.assignedTo || subtask.assignedBy) && (
                           <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1 ml-6">
-                            {subtask.assignedTo && (
-                              <span>Assigned To: {users.find(u => u.id === subtask.assignedTo)?.name || 'Unknown'}</span>
-                            )}
-                            {subtask.assignedBy && (
-                              <span>Assigned By: {users.find(u => u.id === subtask.assignedBy)?.name || 'Unknown'}</span>
+                            {subtask.assignedTo !== undefined && subtask.assignedTo !== null && (
+                              <span>Assigned To: {users.find(u => u.id === subtask.assignedTo)?.name || `User ID: ${subtask.assignedTo}`}</span>
                             )}
                           </div>
                         )}
@@ -639,19 +697,6 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Select
-                              value={subtask.assignedBy !== undefined ? String(subtask.assignedBy) : ''}
-                              onValueChange={(value) => handleUpdateSubtaskField(subtask.id, { assignedBy: Number(value) })}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Assigned By" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {users.map((user) => (
-                                  <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
                           </div>
                         )}
                       </>
@@ -673,26 +718,13 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
                   />
                   <Button onClick={handleAddSubtask}><Plus className="w-4 h-4 mr-2" /> Add</Button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   <Select
                     value={newSubtaskAssignedTo !== null ? String(newSubtaskAssignedTo) : ''}
                     onValueChange={(value) => setNewSubtaskAssignedTo(Number(value))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Assign To" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={newSubtaskAssignedBy !== null ? String(newSubtaskAssignedBy) : ''}
-                    onValueChange={(value) => setNewSubtaskAssignedBy(Number(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Assigned By" />
                     </SelectTrigger>
                     <SelectContent>
                       {users.map((user) => (

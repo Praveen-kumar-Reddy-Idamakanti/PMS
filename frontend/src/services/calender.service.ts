@@ -48,11 +48,11 @@ export async function fetchDateDetails(
   return res.json(); // fetchWithAuth returns Response object, need to parse JSON
 }
 
-// Fetch tasks for a specific month
+// Fetch tasks for a specific month for the specified user
 export async function fetchTasksForMonth(userId: number, month: string, token: string): Promise<CalendarDay[]> {
   try {
-    // Get all tasks and filter by month
-    const response = await fetchWithAuth(`/tasks`, {
+    // Get tasks assigned to the current user
+    const response = await fetchWithAuth(`/tasks?assignedTo=${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     
@@ -66,8 +66,15 @@ export async function fetchTasksForMonth(userId: number, month: string, token: s
     return tasks
       .filter((task: any) => {
         if (!task.dueDate) return false;
-        const taskMonth = new Date(task.dueDate).toISOString().slice(0, 7);
-        return taskMonth === month;
+        try {
+          const taskDate = new Date(task.dueDate);
+          // Check if the task is in the requested month and year
+          return taskDate.getMonth() + 1 === parseInt(month.split('-')[1]) && 
+                 taskDate.getFullYear() === parseInt(month.split('-')[0]);
+        } catch (e) {
+          console.error('Error parsing task date:', task.dueDate, e);
+          return false;
+        }
       })
       .map((task: any) => ({
         date: task.dueDate.split('T')[0], // Extract just the date part

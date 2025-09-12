@@ -3,10 +3,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { userService } from "../../../services/user.service";
-import { toast } from "sonner";
-import { User, UserRole, canCreateUser } from "@/types/user";
+import { userService, type User, type CreateUserData } from "@/services/user.service";
+import { UserRole, canCreateUser } from "@/types/user";
 import { LoadingGif } from "@/components/ui/LoadingGif";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,7 @@ export const UserManagement = () => {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
   const [isRegisterDialogOpen, setIsRegisterDialogOpen] = useState(false);
-  const [formData, setFormData] = useState<RegisterFormData>({
+  const [formData, setFormData] = useState<CreateUserData>({
     name: '',
     email: '',
     password: '',
@@ -53,8 +53,7 @@ export const UserManagement = () => {
   };
 
   const registerUserMutation = useMutation({
-    mutationFn: (userData: Omit<RegisterFormData, 'confirmPassword'>) => 
-      userService.createUser(userData),
+    mutationFn: (userData: CreateUserData) => userService.createUser(userData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast.success('User registered successfully');
@@ -78,8 +77,8 @@ export const UserManagement = () => {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: string, role: UserRole }) => 
-      userService.updateUserRole(userId, role),
+    mutationFn: ({ userId, role }: { userId: string | number, role: UserRole }) => 
+      userService.updateUserRole(String(userId), role),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast.success('User role updated successfully');
@@ -90,7 +89,7 @@ export const UserManagement = () => {
   });
 
   const deleteUserMutation = useMutation({
-    mutationFn: (userId: string) => userService.deleteUser(userId),
+    mutationFn: (userId: string | number) => userService.deleteUser(String(userId)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast.success('User deleted successfully');
@@ -240,7 +239,7 @@ export const UserManagement = () => {
                   value={user.role}
                   onChange={(e) => 
                     updateRoleMutation.mutate({ 
-                      userId: user.id, 
+                      userId: user.id.toString(), 
                       role: e.target.value as UserRole 
                     })
                   }
@@ -263,7 +262,7 @@ export const UserManagement = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => deleteUserMutation.mutate(user.id)}
+                  onClick={() => deleteUserMutation.mutate(user.id.toString())}
                   disabled={deleteUserMutation.isPending}
                   className="border-destructive text-destructive hover:bg-destructive/90"
                 >

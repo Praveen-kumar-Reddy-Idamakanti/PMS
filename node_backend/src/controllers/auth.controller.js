@@ -95,16 +95,18 @@ const register = async (req, res) => {
                     return sendResponse(res, 500, false, 'Server error during token generation');
                 }
                 
+                // Return the user data in the expected format
                 res.status(201).json({
                     success: true,
                     message: 'User registered successfully',
-                    token,
                     user: {
                         id: user.id,
                         name: user.name,
                         email: user.email,
-                        role: user.role || 'user'  // Include role in the response
-                    }
+                        employeeId: user.employee_id,
+                        role: user.role || 'user'
+                    },
+                    token
                 });
             }
         );

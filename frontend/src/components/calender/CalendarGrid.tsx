@@ -66,137 +66,118 @@ export default function CalendarGrid({
   const getEventsForDate = (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd");
     const dateRecords = records.filter((r) => r.date === dateStr);
-    
-    // Track seen task IDs and titles to prevent duplicates
+
     const seenTasks = new Set<string | number>();
-    
+
     return dateRecords.filter(record => {
-      // Keep all non-task records
       if (record.status !== 'task_due') return true;
-      
-      // Generate a unique key for each task
+
       const taskKey = record.task_id || record.task_title;
-      
-      // Skip if we've seen this task before
       if (taskKey && seenTasks.has(taskKey)) {
         return false;
       }
-      
-      // Mark this task as seen
       if (taskKey) {
         seenTasks.add(taskKey);
       }
-      
       return true;
     });
   };
 
-  const getEventBadge = (event: CalendarDay, index: number) => {
+  const getEventDot = (event: CalendarDay, index: number) => {
     const config = getStatusConfig(event.status);
     if (!config) return null;
-    
-    const { label, icon: Icon } = config;
-    const colors = statusColors[event.status as keyof typeof statusColors] || 
-                  { bg: 'border-gray-300', text: 'text-gray-800' };
-    
-    // For task events, show the task title with a colored border
-    if (event.status === 'task_due') {
-      return (
-        <div 
-          key={index}
-          className={cn(
-            "text-xs px-1.5 py-0.5 rounded-md truncate w-full text-center",
-            "border border-[hsl(20,85%,60%)] text-[hsl(20,85%,60%)] bg-[hsl(20,85%,10%)]/5",
-            "hover:bg-[hsl(20,85%,10%)]/10 transition-colors"
-          )}
-          title={event.task_title || 'Task due'}
-        >
-          {event.task_title || 'Task'}
-        </div>
-      );
-    }
-    
-    // For other statuses, show a small colored dot
+    const statusKey = event.status;
+    const colors = statusColors[statusKey as keyof typeof statusColors] || 
+                  { bg: 'bg-gray-300', text: 'text-gray-800' };
+
     return (
-      <div 
+      <div
         key={index}
         className={cn(
-          "w-1.5 h-1.5 rounded-full mx-auto",
+          "w-2 h-2 rounded-full mx-auto",
           colors.bg,
           "transition-all hover:scale-125"
         )}
-        title={label}
+        title={config.label}
       />
     );
   };
 
   const dayHeaders = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  
+
   return (
-    <div className="grid grid-cols-7 gap-1 mb-4">
+    <div className="grid grid-cols-7 gap-1">
       {/* Day headers */}
-      {dayHeaders.map((day, index) => (
-        <div
-          key={`${day}-${index}`}
-          className="text-center text-xs font-medium text-muted-foreground py-2"
-          title={day}
-        >
-          {day[0]}
+      {dayHeaders.map((day) => (
+        <div key={day} className="text-center text-sm font-medium py-2 text-gray-500">
+          {day}
         </div>
       ))}
 
       {/* Empty cells */}
-      {leadingEmptyCells.map((_, idx) => (
-        <div key={`empty-${idx}`} />
+      {leadingEmptyCells.map((_, index) => (
+        <div key={`empty-${index}`} className="h-24 " />
       ))}
 
-      {/* Days */}
-      {days.map((day, idx) => {
-        const dateStr = format(day, "yyyy-MM-dd");
+      {/* Day cells */}
+      {days.map((day) => {
         const dayEvents = getEventsForDate(day);
-        const isSelected = isSameDay(day, selectedDate);
+        const isSelected = selectedDate && isSameDay(day, selectedDate);
         const isToday = isSameDay(day, new Date());
+        const isCurrentMonth = isSameMonth(day, currentDate);
+        const isSunday = getDay(day) === 0;
+        const isHoliday = dayEvents.some(e => e.status === 'holiday');
+        const hasTask = dayEvents.some(e => e.status === 'task_due');
+
+        let dayStatus: string | null = null;
+        if (dayEvents.length > 0) {
+          if (dayEvents.some(e => e.status === 'present')) dayStatus = 'present';
+          else if (dayEvents.some(e => e.status === 'absent')) dayStatus = 'absent';
+          else if (dayEvents.some(e => e.status === 'leave')) dayStatus = 'leave';
+          else if (dayEvents.some(e => e.status === 'task_due')) dayStatus = 'task_due';
+          else if (dayEvents.some(e => e.status === 'holiday')) dayStatus = 'holiday';
+        }
+
+        const statusKey = dayStatus || 'future';
+        const colors = statusColors[statusKey as keyof typeof statusColors] || 
+                      { bg: 'bg-gray-800', text: 'text-gray-400' };
 
         return (
-          <div
-            key={dateStr}
-            className={cn(
-              "relative min-h-20 p-1 rounded-md transition-colors flex flex-col items-center",
-              isSelected
-                ? "bg-[hsl(20,85%,60%)]/10 ring-1 ring-[hsl(20,85%,60%)]"
-                : "hover:bg-accent/5"
-            )}
+          <button
+            key={day.toString()}
             onClick={() => onSelectDate(day)}
+            className={cn(
+              'h-24 p-1.5 text-left text-sm transition-colors flex flex-col items-center justify-center',
+              ' hover:bg-gray-800/5',
+              isSelected && 'ring-1 ring-blue-500',
+              !isCurrentMonth && 'text-gray-600',
+              isToday && 'font-bold '
+            )}
           >
-            <div className="flex-1 flex flex-col items-center justify-center w-full">
-              <div
-                className={cn(
-                  "w-6 h-6 flex items-center justify-center text-sm rounded-full mb-1",
-                  isToday 
-                    ? "bg-[hsl(20,85%,60%)] text-white" 
-                    : isSelected 
-                      ? "text-[hsl(20,85%,60%)] font-medium"
-                      : "text-foreground"
-                )}
-              >
-                {format(day, "d")}
-              </div>
-              
-              {/* Event indicators */}
-              <div className="w-full mt-1 space-y-1">
-                {dayEvents.slice(0, 2).map((event, eventIdx) => (
-                  <div key={`${dateStr}-${eventIdx}`} className="w-full">
-                    {getEventBadge(event, eventIdx)}
-                  </div>
-                ))}
-                {dayEvents.length > 2 && (
-                  <div className="text-xs text-muted-foreground text-center">
-                    +{dayEvents.length - 2} more
-                  </div>
-                )}
-              </div>
+            {/* Date centered */}
+            <span className={cn(
+              'inline-flex items-center justify-center rounded-full h-6 w-6',
+              isSelected ? 'bg-blue-600 text-white' : colors.text,
+              isToday && !isSelected && 'border border-blue-500'
+            )}>
+              {format(day, 'd')}
+            </span>
+
+            {/* Event dots below the date */}
+            <div className="mt-1 space-y-1">
+              {dayEvents.slice(0, 3).map((event, idx) => getEventDot(event, idx))}
+              {dayEvents.length > 3 && (
+                <div className="text-xs text-muted-foreground text-center">+{dayEvents.length - 3}</div>
+              )}
             </div>
-          </div>
+
+            {/* Task label if task_due exists */}
+            {hasTask && (
+              <div className="mt-1 text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full">
+                Task
+              </div>
+            )}
+          </button>
         );
       })}
     </div>

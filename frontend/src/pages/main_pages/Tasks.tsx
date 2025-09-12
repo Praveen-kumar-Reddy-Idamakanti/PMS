@@ -79,7 +79,6 @@ export default function Tasks() {
     switch (status) {
       case 'todo':
         return {
-          color: 'bg-muted',
           textColor: 'text-muted-foreground',
           borderColor: 'border-muted',
           icon: Clock,
@@ -87,7 +86,6 @@ export default function Tasks() {
         };
       case 'in-progress':
         return {
-          color: 'bg-status-info',
           textColor: 'text-status-info',
           borderColor: 'border-status-info',
           icon: Clock,
@@ -95,7 +93,6 @@ export default function Tasks() {
         };
       case 'review':
         return {
-          color: 'bg-status-warning',
           textColor: 'text-status-warning',
           borderColor: 'border-status-warning',
           icon: AlertCircle,
@@ -103,7 +100,7 @@ export default function Tasks() {
         };
       case 'completed':
         return {
-          color: 'bg-status-excellent',
+    
           textColor: 'text-status-excellent',
           borderColor: 'border-status-excellent',
           icon: CheckCircle,
@@ -341,6 +338,13 @@ export default function Tasks() {
           </div>
         </div>
       </div>
+      
+      {/* Create Task Dialog */}
+      <CreateTaskDialog 
+        isOpen={isCreateTaskDialogOpen}
+        onClose={() => setIsCreateTaskDialogOpen(false)}
+        onTaskCreated={handleTaskCreated}
+      />
     </div>
   );
 }

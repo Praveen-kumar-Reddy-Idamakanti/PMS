@@ -333,7 +333,7 @@ const deleteTask = async (req, res) => {
 // Create a subtask for a given task
 const createSubtask = async (req, res) => {
   const { taskId } = req.params;
-  const { title, completed, assignedTo, assignedBy, completionDescription } = req.body;
+  const { title, completed, assignedTo, completionDescription } = req.body;
   const userId = req.user ? req.user.id : null;
   
   logger.debug(`[createSubtask] Request Body: ${JSON.stringify(req.body)}`);
@@ -357,14 +357,37 @@ const createSubtask = async (req, res) => {
         message: 'You are not authorized to create subtasks for this task' 
       });
     }
+    
+    // Set assignedBy to the current user if not provided
+    const assignedBy = req.body.assignedBy || userId;
+    
     const result = await run(
       `INSERT INTO SubTasks (title, completed, taskId, assignedTo, assignedBy, completionDescription, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [title, completed || false, parseInt(taskId), assignedTo || null, assignedBy || null, completionDescription || null] // Use completionDescription
+      [
+        title, 
+        completed || false, 
+        parseInt(taskId), 
+        assignedTo || null, 
+        assignedBy || null, 
+        completionDescription || null
+      ]
     );
-    const newSubtask = await query('SELECT * FROM SubTasks WHERE id = ?', [result.lastID]);
-    logger.debug(`[createSubtask] Response: ${JSON.stringify(newSubtask[0])}`); // Debug log
-    res.status(201).json(newSubtask[0]);
+    
+    // Fetch the newly created subtask with user details
+    const [newSubtask] = await query(
+      `SELECT st.*, 
+              u1.name as assignedToName, u1.email as assignedToEmail,
+              u2.name as assignedByName, u2.email as assignedByEmail
+       FROM SubTasks st
+       LEFT JOIN Users u1 ON st.assignedTo = u1.id
+       LEFT JOIN Users u2 ON st.assignedBy = u2.id
+       WHERE st.id = ?`, 
+      [result.lastID]
+    );
+    
+    logger.debug(`[createSubtask] Response: ${JSON.stringify(newSubtask)}`);
+    res.status(201).json(newSubtask);
   } catch (error) {
     logger.error(`[createSubtask] Error: ${error.message}`, error); // Debug log
     res.status(500).json({ message: 'Error creating subtask', error: error.message });

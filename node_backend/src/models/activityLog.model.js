@@ -153,22 +153,22 @@ class ActivityLog {
       const params = [];
       
       if (action) {
-        whereClauses.push('action = ?');
+        whereClauses.push('activity_type = ?');
         params.push(action);
       }
       
       if (userId) {
-        whereClauses.push('userId = ?');
+        whereClauses.push('al.user_id = ?');
         params.push(userId);
       }
       
       if (startDate) {
-        whereClauses.push('createdAt >= ?');
+        whereClauses.push('created_at >= ?');
         params.push(new Date(startDate).toISOString());
       }
       
       if (endDate) {
-        whereClauses.push('createdAt <= ?');
+        whereClauses.push('created_at <= ?');
         params.push(new Date(endDate).toISOString());
       }
       
@@ -176,14 +176,14 @@ class ActivityLog {
       
       // Get total count
       const countResult = await query(
-        `SELECT COUNT(*) as total FROM ActivityLogs ${whereClause}`, 
+        `SELECT COUNT(*) as total FROM user_activity ${whereClause}`, 
         params
       );
       const total = countResult ? countResult.total : 0;
       
       // Validate sort column to prevent SQL injection
-      const validSortColumns = ['id', 'userId', 'action', 'createdAt'];
-      const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'createdAt';
+      const validSortColumns = ['id', 'user_id', 'activity_type', 'created_at'];
+      const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
       const sortDirection = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       
       // Get paginated results with user details
@@ -193,10 +193,10 @@ class ActivityLog {
           u.name as user_name, 
           u.email as user_email,
           u.role as user_role
-        FROM ActivityLogs al
-        LEFT JOIN Users u ON al.userId = u.id
+        FROM user_activity al
+        LEFT JOIN users u ON al.user_id = u.id
         ${whereClause} 
-        ORDER BY al.${sortColumn} ${sortDirection}
+        ORDER BY al.${sortColumn === 'createdAt' ? 'created_at' : sortColumn} ${sortDirection}
         LIMIT ? OFFSET ?`,
         [...params, limit, offset]
       );
@@ -205,20 +205,18 @@ class ActivityLog {
       const processedRows = rows.map(row => {
         const log = new ActivityLog({
           id: row.id,
-          user_id: row.userId,
-          activity_type: row.action,
-          details: {
-            description: row.description,
-            oldValue: row.oldValue,
-            newValue: row.newValue
-          },
-          created_at: row.createdAt
+          user_id: row.user_id,
+          activity_type: row.activity_type,
+          details: row.details ? (typeof row.details === 'string' ? JSON.parse(row.details) : row.details) : {},
+          ip_address: row.ip_address,
+          user_agent: row.user_agent,
+          created_at: row.created_at
         });
         
         // Add user details if available
-        if (row.userId) {
+        if (row.user_id) {
           log.user = {
-            id: row.userId,
+            id: row.user_id,
             name: row.user_name,
             email: row.user_email,
             role: row.user_role || 'member'

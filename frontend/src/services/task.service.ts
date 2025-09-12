@@ -78,12 +78,27 @@ const taskService = {
 
   // Subtask operations
   createSubtask: async (taskId: string, subtask: Omit<Subtask, 'id'>): Promise<Subtask> => {
-    console.log("createSubtask",taskId, subtask);
+    console.log("createSubtask", taskId, subtask);
+    
+    // Ensure assignedBy is included in the request body
+    const requestBody = {
+      ...subtask,
+      assignedBy: subtask.assignedBy || undefined // Ensure it's not null
+    };
+    
+    console.log("Sending subtask data:", requestBody);
+    
     const response = await fetchWithAuth(`/tasks/${taskId}/subtasks`, {
       method: 'POST',
-      body: JSON.stringify(subtask),
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
     });
-    return response.json();
+    
+    const responseData = await response.json();
+    console.log("Received response:", responseData);
+    return responseData;
   },
 
   updateSubtask: async (taskId: string, subtaskId: string, subtask: Partial<Subtask>): Promise<Subtask> => {
