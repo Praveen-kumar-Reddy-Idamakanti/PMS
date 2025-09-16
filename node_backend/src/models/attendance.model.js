@@ -16,8 +16,7 @@ function debugModel(method, message, data = {}) {
         
         // Also log to console in development for better visibility
         if (process.env.NODE_ENV === 'development') {
-            console.log(`[${logData.timestamp}] [Attendance.${method}] ${message}`, 
-                Object.keys(data).length ? data : '');
+            // console.log(`[${logData.timestamp}] [Attendance.${method}] ${message}`, Object.keys(data).length ? data : '');
         }
     }
 }

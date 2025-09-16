@@ -27,13 +27,7 @@ const logActivity = async (userId, activityType, details = {}, req = null) => {
     const ipAddress = req?.ip || req?.connection?.remoteAddress || null;
     const userAgent = req?.get('User-Agent') || null;
     
-    console.log('Logging activity:', {
-      userId,
-      activityType,
-      ipAddress,
-      userAgent,
-      details
-    });
+    // console.log('Logging activity:', { userId, activityType, ipAddress, userAgent, details });
     
     const activityLog = await ActivityLog.logActivity({
       userId,

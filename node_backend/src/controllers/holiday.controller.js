@@ -6,12 +6,9 @@ const { NotFoundError, BadRequestError } = require('../utils/error');
 // @access  Private
 exports.getHolidays = async (req, res, next) => {
     try {
-        console.log('Fetching all holidays...');
         const holidays = await Holiday.findAll();
-        console.log('Holidays from database:', holidays);
         // Ensure we always return an array, even if it's empty
         const result = Array.isArray(holidays) ? holidays : [];
-        console.log('Returning holidays:', result);
         res.json(result);
     } catch (error) {
         console.error('Error in getHolidays:', error);

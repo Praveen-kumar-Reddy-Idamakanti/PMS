@@ -84,7 +84,7 @@ const formatMessage = (level, message, ...args) => {
 const logger = {
   // Basic logging
   log: (message, ...args) => {
-    console.log(formatMessage('info', message, ...args));
+    // console.log(formatMessage('info', message, ...args));
   },
   
   // Info level
@@ -94,7 +94,7 @@ const logger = {
   
   // Success level
   success: (message, ...args) => {
-    console.log(formatMessage('success', message, ...args));
+    // console.log(formatMessage('success', message, ...args));
   },
   
   // Warning level
@@ -116,7 +116,7 @@ const logger = {
   
   // HTTP request/response logging
   http: (message, ...args) => {
-    console.log(formatMessage('http', message, ...args));
+    // console.log(formatMessage('http', message, ...args));
   },
   
   // For morgan HTTP request logging

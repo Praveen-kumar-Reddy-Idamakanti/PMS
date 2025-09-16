@@ -52,7 +52,6 @@ function validateLeaveRequest(data) {
 
 const LeaveRequest = {
   async create(data) {
-    console.log('[LeaveRequest.create] Starting leave request creation with data:', JSON.stringify(data, null, 2));
     
     try {
       // First validate the basic data
@@ -62,16 +61,16 @@ const LeaveRequest = {
       const year = startDate.getFullYear();
       const month = startDate.getMonth() + 1; // JavaScript months are 0-indexed
       
-      console.log(`[LeaveRequest.create] Validated data - Start: ${startDate.toISOString()}, End: ${new Date(validatedData.end_date).toISOString()}, Days: ${days}`);
+      // console.log(`[LeaveRequest.create] Validated data - Start: ${startDate.toISOString()}, End: ${new Date(validatedData.end_date).toISOString()}, Days: ${days}`);
     
       // Get leave type details
-      console.log(`[LeaveRequest.create] Fetching leave type with ID: ${validatedData.leave_type_id}`);
+      // console.log(`[LeaveRequest.create] Fetching leave type with ID: ${validatedData.leave_type_id}`);
       const [leaveType] = await query('SELECT * FROM leave_types WHERE id = ?', [validatedData.leave_type_id]);
       if (!leaveType) {
         console.error(`[LeaveRequest.create] Error: Invalid leave type ID: ${validatedData.leave_type_id}`);
         throw new Error('Invalid leave type');
       }
-      console.log(`[LeaveRequest.create] Found leave type: ${leaveType.name} (ID: ${leaveType.id})`);
+      // console.log(`[LeaveRequest.create] Found leave type: ${leaveType.name} (ID: ${leaveType.id})`);
       
       // Additional validation for casual leave
       const leaveTypeName = leaveType.name.toLowerCase();
@@ -81,21 +80,21 @@ const LeaveRequest = {
       const endMonth = endDate.getMonth();
       const endYear = endDate.getFullYear();
       
-      console.log(`[LeaveRequest.create] Date validation - Start: ${startYear}-${startMonth + 1}, End: ${endYear}-${endMonth + 1}`);
+      // console.log(`[LeaveRequest.create] Date validation - Start: ${startYear}-${startMonth + 1}, End: ${endYear}-${endMonth + 1}`);
       
       // Check if it's a casual leave spanning months
       if (leaveTypeName.includes('casual') && leaveTypeName.includes('leave')) {
-        console.log(`[LeaveRequest.create] Processing casual leave validation`);
+        // console.log(`[LeaveRequest.create] Processing casual leave validation`);
         if (startYear !== endYear || startMonth !== endMonth) {
           console.error(`[LeaveRequest.create] Error: Casual leave spans multiple months - Start: ${startYear}-${startMonth + 1}, End: ${endYear}-${endMonth + 1}`);
           throw new Error('Casual leave cannot span more than one month');
         }
-        console.log(`[LeaveRequest.create] Casual leave date range is within the same month`);
+        // console.log(`[LeaveRequest.create] Casual leave date range is within the same month`);
       }
       
       // Check if this is a casual leave (case-insensitive check)
       if (leaveTypeName.includes('casual')) {
-        console.log(`[LeaveRequest.create] Checking for existing casual leaves for user ${validatedData.user_id} in ${year}-${month}`);
+        // console.log(`[LeaveRequest.create] Checking for existing casual leaves for user ${validatedData.user_id} in ${year}-${month}`);
         
         // Check for any casual leaves in the same month
         const queryStr = `
@@ -109,17 +108,14 @@ const LeaveRequest = {
         const yearMonth = `${year}-${month.toString().padStart(2, '0')}`;
         const queryParams = [validatedData.user_id, yearMonth];
         
-        console.log('Checking for existing casual leaves in the same month with params:', {
-          userId: validatedData.user_id,
-          yearMonth
-        });
+        // console.log('Checking for existing casual leaves in the same month with params:', { userId: validatedData.user_id, yearMonth });
         
-        console.log(`[LeaveRequest.create] Running query:`, queryStr.replace(/\s+/g, ' ').trim());
-        console.log(`[LeaveRequest.create] Query params:`, queryParams);
+        // console.log(`[LeaveRequest.create] Running query:`, queryStr.replace(/\s+/g, ' ').trim());
+        // console.log(`[LeaveRequest.create] Query params:`, queryParams);
         
         const existingCasualLeaves = await query(queryStr, queryParams);
         
-        console.log(`[LeaveRequest.create] Found ${existingCasualLeaves.length} existing casual leaves in month ${yearMonth}`);
+        // console.log(`[LeaveRequest.create] Found ${existingCasualLeaves.length} existing casual leaves in month ${yearMonth}`);
         
         if (existingCasualLeaves.length > 0) {
           const existingLeave = existingCasualLeaves[0];
@@ -135,9 +131,9 @@ const LeaveRequest = {
       }
       
       // Check leave balance but don't deduct yet
-      console.log(`[LeaveRequest.create] Checking leave balance for user ${validatedData.user_id} in year ${year}`);
+      // console.log(`[LeaveRequest.create] Checking leave balance for user ${validatedData.user_id} in year ${year}`);
       const balance = await this.getLeaveBalance(validatedData.user_id, year);
-      console.log(`[LeaveRequest.create] Current leave balance:`, balance);
+      // console.log(`[LeaveRequest.create] Current leave balance:`, balance);
       
       // If no balance record exists, create one with default values
       if (!balance) {
@@ -158,13 +154,13 @@ const LeaveRequest = {
         
       await run('BEGIN TRANSACTION');
       try {
-        console.log(`[LeaveRequest.create] Creating new leave request in database`);
+        // console.log(`[LeaveRequest.create] Creating new leave request in database`);
         const result = await run(
           'INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, reason, status, days) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [validatedData.user_id, validatedData.leave_type_id, validatedData.start_date, validatedData.end_date, validatedData.reason, 'pending', days]
         );
 
-        console.log(`[LeaveRequest.create] Successfully created leave request with ID: ${result.lastID}`);
+        // console.log(`[LeaveRequest.create] Successfully created leave request with ID: ${result.lastID}`);
         
         await run('COMMIT');
         return { ...validatedData, id: result.lastID, status: 'pending', days };
@@ -265,7 +261,7 @@ const LeaveRequest = {
       whereClauses.push('(lr.start_date BETWEEN ? AND ? OR lr.end_date BETWEEN ? AND ?)');
       params.push(startDate, endDate, startDate, endDate);
       
-      console.log('Date range filter:', { startDate, endDate });
+      // console.log('Date range filter:', { startDate, endDate });
     }
     
     const whereClause = whereClauses.length 

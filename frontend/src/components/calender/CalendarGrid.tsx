@@ -131,10 +131,10 @@ export default function CalendarGrid({
 
         let dayStatus: string | null = null;
         if (dayEvents.length > 0) {
-          if (dayEvents.some(e => e.status === 'present')) dayStatus = 'present';
+          if (dayEvents.some(e => e.status === 'task_due')) dayStatus = 'task_due';
+          else if (dayEvents.some(e => e.status === 'present')) dayStatus = 'present';
           else if (dayEvents.some(e => e.status === 'absent')) dayStatus = 'absent';
           else if (dayEvents.some(e => e.status === 'leave')) dayStatus = 'leave';
-          else if (dayEvents.some(e => e.status === 'task_due')) dayStatus = 'task_due';
           else if (dayEvents.some(e => e.status === 'holiday')) dayStatus = 'holiday';
         }
 
@@ -157,8 +157,9 @@ export default function CalendarGrid({
             {/* Date centered */}
             <span className={cn(
               'inline-flex items-center justify-center rounded-full h-6 w-6',
-              isSelected ? 'bg-blue-600 text-white' : colors.text,
-              isToday && !isSelected && 'border border-blue-500'
+              isSelected ? 'bg-blue-600 text-white' : 
+              hasTask ? 'bg-[hsl(20,85%,60%)] text-white' : colors.text,
+              isToday && !isSelected && !hasTask && 'border border-blue-500'
             )}>
               {format(day, 'd')}
             </span>
@@ -173,8 +174,8 @@ export default function CalendarGrid({
 
             {/* Task label if task_due exists */}
             {hasTask && (
-              <div className="mt-1 text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full">
-                Task
+              <div className="mt-1 text-[9px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full font-medium">
+                {dayEvents.find(e => e.status === 'task_due')?.task_title || 'Task'}
               </div>
             )}
           </button>

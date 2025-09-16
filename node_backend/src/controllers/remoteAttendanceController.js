@@ -148,7 +148,6 @@ const approveRemoteRequest = async (req, res) => {
             console.error('Error updating request status:', err);
             reject(err);
           } else {
-            console.log(`Request ${requestId} status updated to approved by admin ${adminId}`);
             resolve();
           }
         }
@@ -160,7 +159,6 @@ const approveRemoteRequest = async (req, res) => {
     // Set time to 10:00 AM in local time and convert to ISO string with timezone
     attendanceDate.setHours(10, 0, 0, 0);
     const timestamp = attendanceDate.toISOString();
-    console.log(`Creating attendance record for user ${request.user_id} at ${timestamp}`);
     
     await new Promise((resolve, reject) => {
       db.run(
@@ -172,7 +170,6 @@ const approveRemoteRequest = async (req, res) => {
             console.error('Error creating attendance record:', err);
             reject(err);
           } else {
-            console.log(`Attendance record created with ID: ${this.lastID}`);
             resolve();
           }
         }
@@ -218,7 +215,6 @@ const approveRemoteRequest = async (req, res) => {
 
 // Reject remote work request (Admin only)
 const rejectRemoteRequest = async (req, res) => {
-  console.log('Reject request received:', { params: req.params, body: req.body });
   const { id: requestId } = req.params;
   const { comments: rejectionReason } = req.body;
   const adminId = req.user.id;
@@ -274,7 +270,6 @@ const rejectRemoteRequest = async (req, res) => {
     }
 
     // Update request status to rejected
-    console.log(`Rejecting request ${requestId} with reason: ${rejectionReason}`);
     await new Promise((resolve, reject) => {
       db.run(
         'UPDATE remote_attendance_requests SET status = ?, rejected_by = ?, rejected_at = CURRENT_TIMESTAMP, rejection_reason = ? WHERE request_id = ?',
@@ -284,7 +279,6 @@ const rejectRemoteRequest = async (req, res) => {
             console.error('Error updating request status to rejected:', err);
             reject(err);
           } else {
-            console.log(`Request ${requestId} rejected by admin ${adminId}`);
             resolve();
           }
         }
@@ -442,9 +436,3 @@ module.exports = {
 };
 
 // Debug log
-console.log('Controller exports:');
-console.log('- requestRemoteWork:', typeof requestRemoteWork === 'function' ? '✅' : '❌');
-console.log('- approveRemoteRequest:', typeof approveRemoteRequest === 'function' ? '✅' : '❌');
-console.log('- rejectRemoteRequest:', typeof rejectRemoteRequest === 'function' ? '✅' : '❌');
-console.log('- getUserRemoteRequests:', typeof getUserRemoteRequests === 'function' ? '✅' : '❌');
-console.log('- getPendingRequests:', typeof getPendingRequests === 'function' ? '✅' : '❌');

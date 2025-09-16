@@ -17,13 +17,29 @@ export interface CalendarDay {
 }
 
 export interface DateDetail {
-  type: "present" | "absent" | "leave" | "holiday" | "future";
+  type: "present" | "absent" | "leave" | "holiday" | "future" | "task_due";
   name?: string;        // for holiday
-  reason?: string;      // for leave
-  status?: string;      // leave status
-  checkin?: string;     // for present
-  checkout?: string;    // for present
-  total_hours?: number; // for present
+  reason?: string;      // for leave (legacy)
+  status?: string;      // leave status (legacy)
+  checkin?: string;     // for present (legacy)
+  checkout?: string;    // for present (legacy)
+  total_hours?: number; // for present (legacy)
+  task_title?: string;  // for task_due (legacy)
+  task_description?: string; // for task_due (legacy)
+  // New structure for multiple items
+  leave?: {
+    reason: string;
+    status: string;
+  };
+  task?: {
+    title: string;
+    description?: string;
+  };
+  attendance?: {
+    checkin: string;
+    checkout: string;
+    total_hours: number;
+  };
 }
 
 export async function fetchMonthlyCalendar(

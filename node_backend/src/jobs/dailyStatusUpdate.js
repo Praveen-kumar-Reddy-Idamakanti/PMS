@@ -4,7 +4,6 @@ const moment = require('moment');
 
 async function updateDailyStatus() {
     const today = moment().format('YYYY-MM-DD');
-    console.log(`[${new Date().toISOString()}] Starting daily status update for ${today}`);
 
     try {
         // Apply PRAGMAs before transaction
@@ -33,7 +32,6 @@ async function updateDailyStatus() {
                 WHERE u.is_active = 1
             `, [today, today]);
 
-            console.log(`[${new Date().toISOString()}] ✅ Today is a holiday (${holiday[0].name}). Marked all active users as 'holiday'.`);
             return; // Exit early, skip rest of logic
         }
 
@@ -121,7 +119,6 @@ async function updateDailyStatus() {
         `, [today, today, today, today]);
 
         await run('COMMIT');
-        console.log(`[${new Date().toISOString()}] ✅ Successfully updated daily statuses for ${today}`);
     } catch (error) {
         await run('ROLLBACK');
         console.error(`[${new Date().toISOString()}] ❌ Error updating daily statuses:`, error);

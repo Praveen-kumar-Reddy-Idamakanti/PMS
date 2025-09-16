@@ -17,7 +17,6 @@ class Holiday {
     static async findAll() {
         try {
             const rows = await db.query('SELECT * FROM holidays ORDER BY date');
-            console.log('Fetched holidays count:', rows.length);
             return rows;
         } catch (error) {
             console.error('Error in Holiday.findAll:', error);

@@ -8,8 +8,6 @@ const { checkRole } = require('../middleware/roleCheck');
 const controller = require('../controllers/remoteAttendanceController');
 
 // Debug log
-console.log('Remote Attendance Routes: requestRemoteWork exists:', typeof controller.requestRemoteWork === 'function');
-console.log('Remote Attendance Routes: getUserRemoteRequests exists:', typeof controller.getUserRemoteRequests === 'function');
 
 // User routes for remote attendance
 router.post(

@@ -141,7 +141,6 @@ exports.requestLeave = async (req, res) => {
       const year = s.getFullYear();
       const month = s.getMonth() + 1;
       
-      console.log('Checking casual leave restriction for user:', userId, 'year:', year, 'month:', month);
       
       // Check for existing approved or pending casual leaves in the same month
       const existingCasualLeaves = await LeaveRequest.getAll({
@@ -152,7 +151,6 @@ exports.requestLeave = async (req, res) => {
         month
       });
 
-      console.log('Found existing casual leaves:', existingCasualLeaves);
 
       if (existingCasualLeaves && existingCasualLeaves.length > 0) {
         // Filter out the current request if it exists (for updates)
@@ -160,7 +158,6 @@ exports.requestLeave = async (req, res) => {
           !req.body.id || leave.id.toString() !== req.body.id.toString()
         );
         
-        console.log('Other casual leaves after filtering:', otherLeaves);
         
         if (otherLeaves.length > 0) {
           return res.status(400).json({ 

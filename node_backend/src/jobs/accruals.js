@@ -22,18 +22,15 @@ async function getActiveUsers() {
  */
 async function runMonthlyAccruals() {
   try {
-    console.log('[accruals] Starting monthly accrual job...');
     const types = await LeaveType.getAll(); // returns array of leave types
     const monthlyTypes = types.filter(t => (t.monthly_quota || 0) > 0);
 
     if (!monthlyTypes.length) {
-      console.log('[accruals] No monthly-accrual leave types found. Exiting.');
       return;
     }
 
     const users = await getActiveUsers();
     if (!users || users.length === 0) {
-      console.log('[accruals] No active users found. Exiting.');
       return;
     }
 
@@ -55,14 +52,12 @@ async function runMonthlyAccruals() {
 
           await LeaveBalance.upsert(u.id, t.id, year, next);
 
-          console.log(`[accruals] Credited user=${u.id} leave_type=${t.name} (${t.id}) +${increment} -> ${next} (year=${year})`);
         } catch (innerErr) {
           console.error(`[accruals] Error processing user=${u.id} type=${t.id}:`, innerErr);
         }
       }
     }
 
-    console.log('[accruals] Monthly accruals completed.');
   } catch (err) {
     console.error('[accruals] Fatal error running monthly accruals:', err);
     throw err;
@@ -76,11 +71,9 @@ async function runMonthlyAccruals() {
  */
 async function runYearlyInitAndCarryForward() {
   try {
-    console.log('[accruals] Starting yearly init & carry-forward job...');
     const types = await LeaveType.getAll();
     const users = await getActiveUsers();
     if (!users || users.length === 0) {
-      console.log('[accruals] No active users found. Exiting.');
       return;
     }
 
@@ -109,14 +102,12 @@ async function runYearlyInitAndCarryForward() {
           // Upsert the balance for the new year
           await LeaveBalance.upsert(u.id, t.id, year, initial);
 
-          console.log(`[accruals] User=${u.id} type=${t.name} (${t.id}) initial=${initial} (carry=${carry}, yearly=${yearlyQuota}) for year=${year}`);
         } catch (innerErr) {
           console.error(`[accruals] Error initializing user=${u.id} type=${t.id}:`, innerErr);
         }
       }
     }
 
-    console.log('[accruals] Yearly init & carry-forward completed.');
   } catch (err) {
     console.error('[accruals] Fatal error in yearly init & carry-forward:', err);
     throw err;
@@ -146,7 +137,6 @@ if (require.main === module) {
         }
         await runMonthlyAccruals();
       } else {
-        console.log('Unknown arg. Use: monthly | yearly | all');
       }
       process.exit(0);
     } catch (err) {

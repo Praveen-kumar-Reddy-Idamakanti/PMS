@@ -21,15 +21,12 @@ let db;
  */
 const connectDB = () => {
     return new Promise((resolve, reject) => {
-        console.log('Connecting to database...');
         // Close existing connection if any
         if (dbInstance) {
-            console.log('Closing existing database connection...');
             dbInstance.close();
         }
         
         // Create new connection
-        console.log(`Creating new database connection to: ${dbPath}`);
         dbInstance = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
             if (err) {
                 logger.error('❌ Error connecting to the database:', err.message);
@@ -119,7 +116,6 @@ const closeDB = () => {
  */
 const query = (sql, params = []) => {
     return new Promise((resolve, reject) => {
-        console.log('📝 Executing query:', sql, 'with params:', params);
         const startTime = Date.now();
         db.serialize(() => {
             db.all(sql, params, (err, rows) => {
@@ -133,13 +129,6 @@ const query = (sql, params = []) => {
                     });
                     return reject(err);
                 }
-                console.log('✅ Query successful:', {
-                    sql,
-                    params,
-                    rowCount: rows ? rows.length : 0,
-                    duration: `${duration}ms`,
-                    firstFewRows: rows ? rows.slice(0, 3) : []
-                });
                 resolve(rows || []);
             });
         });

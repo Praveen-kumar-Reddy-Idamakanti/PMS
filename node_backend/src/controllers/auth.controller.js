@@ -25,7 +25,6 @@ async function initializeUserLeaveBalances(userId) {
         currentYear,
         type.yearly_quota
       );
-      console.log(`Initialized ${type.name} for user ${userId} with ${type.yearly_quota} days`);
     }
     return true;
   } catch (error) {
@@ -71,7 +70,6 @@ const register = async (req, res) => {
         }, req);
 
         // Log user data to verify role is present
-        console.log('Register - User data from DB:', { id: user.id, email: user.email, role: user.role });
 
         // Create JWT payload with user data including employee ID
         const payload = { 
@@ -128,10 +126,6 @@ const register = async (req, res) => {
  * @access Public
  */
 const login = async (req, res) => {
-    console.log('Login request received:', {
-        body: req.body,
-        headers: req.headers
-    });
     const { email, employeeId, password } = req.body;
     
     // Validate that either email or employeeId is provided
@@ -147,35 +141,27 @@ const login = async (req, res) => {
         
         // Find user by email or employee ID
         if (email) {
-            console.log('Login attempt with email:', email);
             user = await User.findByEmail(email);
             if (!user) {
-                console.log('User not found for email:', email);
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid credentials'
                 });
             }
         } else if (employeeId) {
-            console.log('Login attempt with employee ID:', employeeId);
             user = await User.findByEmployeeId(employeeId);
             if (!user) {
-                console.log('User not found for employee ID:', employeeId);
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid credentials'
                 });
             }
         }
-        console.log('User found:', { id: user.id, email: user.email });
 
         // Check password
-        console.log('Comparing password...');
         const isMatch = await User.comparePassword(password, user.password);
-        console.log('Password match result:', isMatch);
         
         if (!isMatch) {
-            console.log('Invalid password for user:', email);
             
             // Log failed login attempt
             if (user?.id) {
@@ -194,7 +180,6 @@ const login = async (req, res) => {
         }
 
         // Log user data to verify role is present
-        console.log('User data from DB:', { id: user.id, email: user.email, role: user.role });
 
         // Log login attempt
         await logActivity(user.id, 'USER_LOGIN', {
@@ -227,7 +212,6 @@ const login = async (req, res) => {
                 }
                 
                 // Log the token payload for debugging
-                console.log('Token payload:', payload);
                 
                 // Send token and user data directly in the response
                 res.status(200).json({

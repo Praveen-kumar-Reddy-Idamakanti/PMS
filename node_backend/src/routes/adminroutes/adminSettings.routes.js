@@ -10,7 +10,6 @@ router.get(
   auth, // Require authentication but no specific role
   (req, res, next) => {
     // Log access for debugging
-    console.log(`User ${req.user?.id} (${req.user?.role}) accessing admin settings`);
     next();
   },
   adminSettingsController.getAdminSettings

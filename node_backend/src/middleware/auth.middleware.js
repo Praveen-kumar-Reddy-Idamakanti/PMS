@@ -18,7 +18,7 @@ const authenticate = async (req, res, next) => {
 
     // Check if no token
     if (!token) {
-        console.log('Auth Failed: No token provided');
+        // console.log('Auth Failed: No token provided');
         return res.status(401).json({ 
             success: false,
             message: 'No authentication token, authorization denied' 

@@ -22,16 +22,16 @@ const {
 
 // Debug middleware for attendance routes
 // const debugRoute = (req, res, next) => {
-//     console.log('\n=== ATTENDANCE ROUTE DEBUG ===');
-//     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-//     console.log('Route Path:', req.path);
-//     console.log('Route Params:', req.params);
-//     console.log('Query Params:', req.query);
-//     console.log('Request Headers:', req.headers);
+//     // console.log('\n=== ATTENDANCE ROUTE DEBUG ===');
+//     // console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+//     // console.log('Route Path:', req.path);
+//     // console.log('Route Params:', req.params);
+//     // console.log('Query Params:', req.query);
+//     // console.log('Request Headers:', req.headers);
 //     if (Object.keys(req.body).length > 0) {
-//         console.log('Request Body:', req.body);
+//         // console.log('Request Body:', req.body);
 //     }
-//     console.log('==============================\n');
+//     // console.log('==============================\n');
 //     next();
 // };
 

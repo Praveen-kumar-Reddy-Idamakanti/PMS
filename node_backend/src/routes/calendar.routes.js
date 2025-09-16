@@ -14,14 +14,12 @@ function getDaysInMonth(year, month) {
  * @description Get monthly calendar data for a user
  * @access Private
  */
-console.log('Authenticate middleware:', auth);
 
 router.get('/:userId', auth, async (req, res) => {
     try {
         const { userId } = req.params;
         const { month } = req.query;
 
-        console.log(`[DEBUG][Backend] Calendar request: userId=${userId}, month=${month}`);
 
         if (!month || !/^\d{4}-\d{2}$/.test(month)) {
             return res.status(400).json({ error: 'Invalid month format. Use YYYY-MM' });
@@ -96,9 +94,7 @@ router.get('/:userId', auth, async (req, res) => {
         // Debug: log absent days in backend
         const absentDays = calendarData.filter(d => d.status === 'absent');
         if (absentDays.length > 0) {
-            console.log(`[DEBUG][Backend] Absent days for ${month}:`, absentDays.map(d => d.date));
         }
-        console.log(`[DEBUG][Backend] Calendar response for userId=${userId}, month=${month}:`, calendarData);
         res.json(calendarData);
     } catch (error) {
         console.error('Error fetching calendar data:', error);
@@ -119,55 +115,73 @@ router.get('/:userId/:date', auth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
         }
 
-        const result = await query(`
-            SELECT 
-                CASE 
-                    WHEN EXISTS (SELECT 1 FROM holidays h WHERE h.date = ?) 
-                        THEN json_object('type', 'holiday', 'name', (SELECT h.name FROM holidays h WHERE h.date = ? LIMIT 1))
-                    WHEN EXISTS (SELECT 1 FROM leave_requests lr 
-                                 WHERE lr.user_id = ? 
-                                 AND ? BETWEEN date(lr.start_date) AND date(lr.end_date) 
-                                 AND lr.status = 'approved')
-                        THEN json_object('type', 'leave',
-                                         'reason', (SELECT lr.reason FROM leave_requests lr 
-                                                    WHERE lr.user_id = ? 
-                                                    AND ? BETWEEN date(lr.start_date) AND date(lr.end_date) 
-                                                    AND lr.status = 'approved'
-                                                    LIMIT 1),
-                                         'status', 'approved')
-                    WHEN EXISTS (SELECT 1 FROM attendance a 
-                                 WHERE a.user_id = ? 
-                                 AND date(a.timestamp) = ?
-                                 AND a.type = 'checkin'
-                                 AND EXISTS (
-                                     SELECT 1 FROM attendance a2 
-                                     WHERE a2.user_id = a.user_id 
-                                     AND date(a2.timestamp) = date(a.timestamp) 
-                                     AND a2.type = 'checkout'
-                                 ))
-                        THEN (
-                            SELECT json_object(
-                                'type', 'present',
-                                'checkin', MIN(CASE WHEN a.type = 'checkin' THEN strftime('%H:%M', a.timestamp) END),
-                                'checkout', MAX(CASE WHEN a.type = 'checkout' THEN strftime('%H:%M', a.timestamp) END),
-                                'total_hours', ROUND((
-                                    JULIANDAY(MAX(CASE WHEN a.type = 'checkout' THEN a.timestamp END)) - 
-                                    JULIANDAY(MIN(CASE WHEN a.type = 'checkin' THEN a.timestamp END))
-                                ) * 24, 2)
-                            )
-                            FROM attendance a
-                            WHERE a.user_id = ? 
-                            AND date(a.timestamp) = ?
-                        )
-                    ELSE json_object('type', 'absent')
-                END as data
-        `, [date, date, userId, date, userId, date, userId, date, userId, date]);
+        // Get all information for the date
+        const [holidayResult, leaveResult, taskResult, attendanceResult] = await Promise.all([
+            // Check for holidays
+            query('SELECT name FROM holidays WHERE date = ? LIMIT 1', [date]),
+            // Check for leave requests
+            query(`SELECT reason, status FROM leave_requests 
+                   WHERE user_id = ? AND ? BETWEEN date(start_date) AND date(end_date) 
+                   AND status = 'approved' LIMIT 1`, [userId, date]),
+            // Check for task calendar events
+            query('SELECT title, description FROM TaskCalendarEvents WHERE userId = ? AND date(dueDate) = ? LIMIT 1', [userId, date]),
+            // Check for attendance
+            query(`SELECT 
+                     MIN(CASE WHEN type = 'checkin' THEN strftime('%H:%M', timestamp) END) as checkin,
+                     MAX(CASE WHEN type = 'checkout' THEN strftime('%H:%M', timestamp) END) as checkout,
+                     ROUND((
+                         JULIANDAY(MAX(CASE WHEN type = 'checkout' THEN timestamp END)) - 
+                         JULIANDAY(MIN(CASE WHEN type = 'checkin' THEN timestamp END))
+                     ) * 24, 2) as total_hours
+                   FROM attendance 
+                   WHERE user_id = ? AND date(timestamp) = ? 
+                   AND EXISTS (SELECT 1 FROM attendance a2 WHERE a2.user_id = attendance.user_id 
+                              AND date(a2.timestamp) = date(attendance.timestamp) AND a2.type = 'checkout')`, [userId, date])
+        ]);
 
-        if (result.length === 0 || !result[0].data) {
-            return res.json({ type: 'absent' });
+        // Build response object with all available information
+        const response = {};
+        
+        // Add holiday information
+        if (holidayResult.length > 0) {
+            response.type = 'holiday';
+            response.name = holidayResult[0].name;
+        }
+        
+        // Add leave information
+        if (leaveResult.length > 0) {
+            response.leave = {
+                reason: leaveResult[0].reason,
+                status: leaveResult[0].status
+            };
+            if (!response.type) response.type = 'leave';
+        }
+        
+        // Add task information
+        if (taskResult.length > 0) {
+            response.task = {
+                title: taskResult[0].title,
+                description: taskResult[0].description
+            };
+            if (!response.type) response.type = 'task_due';
+        }
+        
+        // Add attendance information
+        if (attendanceResult.length > 0 && attendanceResult[0].checkin) {
+            response.attendance = {
+                checkin: attendanceResult[0].checkin,
+                checkout: attendanceResult[0].checkout,
+                total_hours: attendanceResult[0].total_hours
+            };
+            if (!response.type) response.type = 'present';
+        }
+        
+        // Set default type if nothing found
+        if (!response.type) {
+            response.type = 'absent';
         }
 
-        res.json(JSON.parse(result[0].data));
+        res.json(response);
     } catch (error) {
         console.error('Error fetching date details:', error);
         res.status(500).json({ error: 'Failed to fetch date details' });

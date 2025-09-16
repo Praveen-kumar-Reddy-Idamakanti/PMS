@@ -59,22 +59,22 @@ const auth = (req, res, next) => {
  */
 const authorize = (...roles) => {
   return (req, res, next) => {
-    console.log('Authorization check - User:', req.user);
-    console.log('Required roles:', roles);
+    // console.log('Authorization check - User:', req.user);
+    // console.log('Required roles:', roles);
     
     if (!req.user) {
       console.error('❌ No user in request');
       return next(new UnauthorizedError('User not authenticated'));
     }
 
-    console.log('User role:', req.user.role);
+    // console.log('User role:', req.user.role);
     
     if (!roles.includes(req.user.role)) {
       console.error(`❌ User role ${req.user.role} not in required roles:`, roles);
       return next(new UnauthorizedError('User not authorized for this action'));
     }
 
-    console.log('✅ User authorized');
+    // console.log('✅ User authorized');
     next();
   };
 };

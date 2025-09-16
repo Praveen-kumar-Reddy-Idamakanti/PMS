@@ -43,8 +43,8 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'http://localhost:8080', 
-    'http://127.0.0.1:8080',
+    'http://localhost:8081', 
+    'http://127.0.0.1:8081',
     process.env.FRONTEND_URL,
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -126,15 +126,12 @@ const setupRoutes = async () => {
     // API Routes
     logger.info('🔄 Setting up API routes...');
     try {
-      console.log('Mounting routes...');
       
       // Mount remote attendance routes first to ensure they're registered
-      //console.log('Mounting /api/remote-attendance...');
       //remote attendance routes
       app.use('/api/remote-attendance', remoteAttendanceRoutes);
       
       // Mount other routes
-      //console.log('Mounting other routes...');
       //auth routes
       app.use('/api/auth', authRoutes);
       //attendance routes
@@ -158,27 +155,22 @@ const setupRoutes = async () => {
       app.use('/api/tasks', taskRoutes);
       app.use('/api/users', userRoutes);
       app.use('/api/task-calendar-events', taskCalendarRoutes); // Mount new task calendar routes
-      //console.log('All routes mounted successfully');
       
       
       
       // Debug: Log all registered routes
-      //console.log('\n=== Registered Routes ===');
       app._router.stack.forEach((middleware) => {
         if (middleware.route) {
           // Routes registered directly on the app
-          //console.log(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
         } else if (middleware.name === 'router') {
           // Routes registered with Router()
           middleware.handle.stack.forEach((handler) => {
             if (handler.route) {
               const methods = Object.keys(handler.route.methods).join(', ').toUpperCase();
-              //console.log(`${methods} ${handler.route.path}`);
             }
           });
         }
       });
-      //console.log('=========================\n');
       
       logger.info('✅ Routes initialized successfully');
     } catch (routeError) {
@@ -263,8 +255,6 @@ const startServer = async () => {
         
         // Start the server after everything is set up
         app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
-            console.log('🚀 All routes and middleware configured successfully');
         });
     } catch (err) {
         console.error('Failed to start server:', err);

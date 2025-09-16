@@ -33,6 +33,10 @@ export default function DateDetails({ date, details, getStatusConfig }: DateDeta
   const config = getStatusConfig(status, format(date, 'yyyy-MM-dd'));
   const Icon = config?.icon!;
 
+  // Determine if we have multiple items to show
+  const hasMultipleItems = (details.attendance && (details.leave || details.task)) || 
+                          (details.leave && details.task);
+
   return (
     <Card className="shadow-medium">
       <CardHeader>
@@ -44,29 +48,44 @@ export default function DateDetails({ date, details, getStatusConfig }: DateDeta
           <Badge variant="outline" className={`${config?.textColor} border-current`}>
             {config?.label}
           </Badge>
+          {hasMultipleItems && (
+            <Badge variant="secondary" className="text-xs">
+              Multiple Events
+            </Badge>
+          )}
         </div>
 
-        {details.type === "present" && (
+        {/* Attendance Information */}
+        {(details.type === "present" || details.attendance) && (
           <div className="space-y-2 text-center">
-            <div className="text-lg font-bold text-foreground">{details.total_hours}h</div>
+            <div className="text-lg font-bold text-foreground">
+              {details.attendance?.total_hours || details.total_hours}h
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="p-2 bg-muted/20 rounded">
-                <div className="text-sm font-medium">{details.checkin}</div>
+                <div className="text-sm font-medium">
+                  {details.attendance?.checkin || details.checkin}
+                </div>
                 <div className="text-xs text-muted-foreground">Check In</div>
               </div>
               <div className="p-2 bg-muted/20 rounded">
-                <div className="text-sm font-medium">{details.checkout}</div>
+                <div className="text-sm font-medium">
+                  {details.attendance?.checkout || details.checkout}
+                </div>
                 <div className="text-xs text-muted-foreground">Check Out</div>
               </div>
             </div>
           </div>
         )}
 
-        {details.type === "leave" && (
+        {/* Leave Information */}
+        {(details.type === "leave" || details.leave) && (
           <div className="text-center text-sm">
             <div className="font-medium mb-1">Leave Details</div>
             <div className="bg-yellow-50 p-3 rounded-md">
-              <p className="text-yellow-800">{details.reason || "No reason provided"}</p>
+              <p className="text-yellow-800">
+                {details.leave?.reason || details.reason || "No reason provided"}
+              </p>
               {isFutureDate && (
                 <p className="text-yellow-600 text-xs mt-1">
                   This is a scheduled leave
@@ -76,9 +95,27 @@ export default function DateDetails({ date, details, getStatusConfig }: DateDeta
           </div>
         )}
 
+        {/* Holiday Information */}
         {details.type === "holiday" && (
           <div className="text-center text-sm text-muted-foreground">
             Holiday: {details.name || "Holiday"}
+          </div>
+        )}
+
+        {/* Task Information */}
+        {(details.type === "task_due" || details.task) && (
+          <div className="text-center text-sm">
+            <div className="font-medium mb-1">Task Due</div>
+            <div className="bg-blue-50 p-3 rounded-md">
+              <p className="text-blue-800 font-medium">
+                {details.task?.title || details.task_title || "Task"}
+              </p>
+              {(details.task?.description || details.task_description) && (
+                <p className="text-blue-600 text-xs mt-1">
+                  {details.task?.description || details.task_description}
+                </p>
+              )}
+            </div>
           </div>
         )}
         

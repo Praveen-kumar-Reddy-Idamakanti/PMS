@@ -74,7 +74,6 @@ const createTask = async (req, res) => {
   const userId = req.user ? req.user.id : assignedBy; // Use authenticated user ID or fallback to assignedBy
   
   try {
-    console.log("createTask", req.body);
     const result = await run(
       `INSERT INTO Tasks (title, description, status, priority, assignedTo, assignedBy, dueDate, progress, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,

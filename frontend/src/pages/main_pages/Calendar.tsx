@@ -190,6 +190,40 @@ export default function Calendar() {
                     onSelectDate={handleDateSelect}
                     getStatusConfig={getStatusConfig}
                   />
+                  
+                  {/* Color Legend */}
+                  <div className="mt-6 pt-4 border-t">
+                    <h4 className="text-sm font-medium text-muted-foreground mb-3">Color Legend</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-[hsl(108,43%,55%)] flex-shrink-0"></div>
+                        <span className="text-muted-foreground">Present</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-[hsl(348,83%,58%)] flex-shrink-0"></div>
+                        <span className="text-muted-foreground">Absent</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-[hsl(43,96%,58%)] flex-shrink-0"></div>
+                        <span className="text-muted-foreground">Leave</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-[hsl(177,47%,55%)] flex-shrink-0"></div>
+                        <span className="text-muted-foreground">Holiday</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-[hsl(20,85%,60%)] flex-shrink-0"></div>
+                        <span className="text-muted-foreground">Task Due</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-gray-200 flex-shrink-0"></div>
+                        <span className="text-muted-foreground">Future</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Click on any date to view detailed information
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

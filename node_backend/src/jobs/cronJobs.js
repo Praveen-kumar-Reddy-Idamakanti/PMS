@@ -4,7 +4,6 @@ const { updateDailyStatus } = require('./dailyStatusUpdate');
 // Schedule the daily status update to run at 9:50 PM every day
 function scheduleDailyStatusUpdate() {
     cron.schedule('08 22 * * *', async () => {
-        console.log(`[${new Date().toISOString()}] Running daily status update job`);
         try {
             await updateDailyStatus();
         } catch (error) {
@@ -12,7 +11,6 @@ function scheduleDailyStatusUpdate() {
         }
     });
     
-    console.log('Daily status update job scheduled to run at 9:50 PM daily');
 }
 
 module.exports = {

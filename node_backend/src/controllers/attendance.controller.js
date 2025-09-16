@@ -9,20 +9,13 @@ const { logActivity } = require('../utils/activityLogger');
  * @param {Object} data - Additional debug data
  */
 // const debugAttendance = (req, message, data = {}) => {
-//     console.log('\n=== ATTENDANCE CONTROLLER DEBUG ===');
-//     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-//     console.log('User ID:', req.user?.id);
-//     console.log('Message:', message);
 //     if (Object.keys(data).length > 0) {
-//         console.log('Data:', JSON.stringify(data, null, 2));
 //     }
 //     if (req.body) {
-//         console.log('Request Body:', JSON.stringify({
 //             ...req.body,
 //             photo: req.body.photo ? '***PHOTO_DATA***' : undefined
 //         }, null, 2));
 //     }
-//     console.log('==================================\n');
 // };
 
 /**
@@ -424,7 +417,6 @@ const getMyAttendance = async (req, res) => {
         const { startDate, endDate } = req.query;
         const userId = req.user.id;
         
-        console.log(`getMyAttendance called for user ${userId}, startDate: ${startDate}, endDate: ${endDate}`);
 
         // Validate date range (if provided)
         if ((startDate && !Date.parse(startDate)) || (endDate && !Date.parse(endDate))) {
@@ -498,8 +490,6 @@ const getMyAttendance = async (req, res) => {
             };
         }).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date descending
 
-        console.log(`getMyAttendance returning ${formattedRecords.length} records with total hours:`, 
-            formattedRecords.map(r => ({ date: r.date, hours: r.totalHours })));
 
         res.status(200).json({
             success: true,

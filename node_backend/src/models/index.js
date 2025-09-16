@@ -9,7 +9,6 @@ const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || 'development';
 const configPath = path.join(__dirname, '..', 'config', 'config.json');
 
-console.log('Attempting to load config from:', configPath);
 
 let config; // Declare config here
 
@@ -20,9 +19,7 @@ if (!fs.existsSync(configPath)) {
 
 try {
   const configContent = fs.readFileSync(configPath, 'utf8');
-  console.log('config.json content loaded successfully.');
   config = JSON.parse(configContent)[env]; // Assign to config here
-  console.log('Loaded config for env:', env, config);
 } catch (parseError) {
   console.error('ERROR: Failed to parse config.json or access environment key:', parseError);
   process.exit(1);

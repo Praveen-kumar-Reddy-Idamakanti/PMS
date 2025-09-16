@@ -7,9 +7,6 @@ const { auth: authenticate, authorize } = require('../../middleware/auth');
 const controller = require('../../controllers/remoteAttendanceController');
 
 // Debug log
-console.log('Admin Routes: getPendingRequests exists:', typeof controller.getPendingRequests === 'function');
-console.log('Admin Routes: approveRemoteRequest exists:', typeof controller.approveRemoteRequest === 'function');
-console.log('Admin Routes: rejectRemoteRequest exists:', typeof controller.rejectRemoteRequest === 'function');
 
 // Admin routes for remote attendance
 router.get(
