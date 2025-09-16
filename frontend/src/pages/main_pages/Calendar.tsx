@@ -9,7 +9,6 @@ import { format, addMonths, subMonths, getDay, isSameDay } from "date-fns";
 import {
   fetchMonthlyCalendar,
   fetchDateDetails,
-  fetchTasksForMonth,
   CalendarDay,
   DateDetail,
 } from "@/services/calender.service";
@@ -28,7 +27,7 @@ export default function Calendar() {
   const userId = user?.id;
   const token = localStorage.getItem("token") || "";
 
-  // Fetch both attendance and task due dates
+  // Fetch calendar data (includes attendance, leave, holiday, and task data)
   useEffect(() => {
     const fetchData = async () => {
       if (!userId) return; // Don't fetch if no user
@@ -36,38 +35,33 @@ export default function Calendar() {
         const month = format(currentDate, "yyyy-MM");
         console.log(`[DEBUG][Frontend] Requesting calendar data for userId=${userId}, month=${month}`);
         
-        // Fetch both attendance and task data in parallel
-        const [attendanceData, tasksData] = await Promise.all([
-          fetchMonthlyCalendar(parseInt(userId), month, token),
-          fetchTasksForMonth(parseInt(userId), month, token)
-        ]);
+        // Fetch all calendar data from the main API (includes attendance, leave, holiday, and task data)
+        const calendarData = await fetchMonthlyCalendar(parseInt(userId), month, token);
+        console.log(`[DEBUG][Frontend] Raw calendar data:`, calendarData);
 
-        // Process attendance data
-        const processedAttendance = attendanceData.map((day): CalendarDay => ({
+        // Process the data and mark Sundays as holidays
+        const processedData = calendarData.map((day): CalendarDay => ({
           ...day,
           date: day.date,
-          type: 'attendance' as const,
           // Mark Sundays as holidays
           ...(getDay(new Date(day.date)) === 0 
             ? { status: 'holiday' as const, holiday_name: 'Sunday' } 
             : {})
         }));
+        console.log(`[DEBUG][Frontend] Processed data:`, processedData);
 
-        // Combine attendance and task data
-        const combinedData = [
-          ...processedAttendance,
-          ...tasksData
-        ];
-
-        setRecords(combinedData);
+        console.log(`[DEBUG][Frontend] Setting records with ${processedData.length} items`);
+        setRecords(processedData);
         
         // Debug: log all status counts
-        const statusCounts = combinedData.reduce((acc, day) => {
+        const statusCounts = processedData.reduce((acc, day) => {
           acc[day.status || 'unknown'] = (acc[day.status || 'unknown'] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
         
         console.log(`[DEBUG][Frontend] Calendar for ${month}:`, statusCounts);
+        console.log(`[DEBUG][Frontend] Sample data:`, processedData.slice(0, 3));
+        console.log(`[DEBUG][Frontend] Records state should now contain ${processedData.length} items`);
       } catch (err) {
         console.error("Failed to fetch calendar data:", err);
       }

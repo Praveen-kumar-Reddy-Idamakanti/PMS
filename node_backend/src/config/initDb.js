@@ -13,6 +13,13 @@ const SALT_ROUNDS = 10;
  */
 const initDatabase = async () => {
   try {
+    // Skip initialization if using PostgreSQL (tables already exist from migration)
+    const usePostgreSQL = process.env.DB_TYPE === 'postgresql' || process.env.DB_HOST;
+    if (usePostgreSQL) {
+      logger.info('📋 Using PostgreSQL - skipping table creation (tables already exist from migration)');
+      return;
+    }
+    
     logger.info('🔨 Initializing database...');
     
     // Create logs directory if it doesn't exist
@@ -223,10 +230,24 @@ const checkDatabase = async () => {
       'user_activity',
       'remote_attendance_requests'
     ];
-    const results = await query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?, ?, ?)",
-      requiredTables
-    );
+    
+    // Check if using PostgreSQL
+    const usePostgreSQL = process.env.DB_TYPE === 'postgresql' || process.env.DB_HOST;
+    
+    let results;
+    if (usePostgreSQL) {
+      // PostgreSQL query
+      results = await query(
+        "SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)",
+        [requiredTables]
+      );
+    } else {
+      // SQLite query
+      results = await query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?, ?, ?)",
+        requiredTables
+      );
+    }
     
     const existingTables = results.map(row => row.name);
     const missingTables = requiredTables.filter(table => !existingTables.includes(table));

@@ -82,7 +82,7 @@ class ActivityLog {
       const result = await run(
         `INSERT INTO user_activity 
          (user_id, activity_type, details, ip_address, user_agent, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
         [
           userId,
           activityType,
@@ -93,7 +93,7 @@ class ActivityLog {
         ]
       );
       
-      return await this.findById(result.lastID);
+      return await this.findById(result.rows[0].id);
     } catch (error) {
       logger.error('Error logging activity:', error);
       // Don't throw to avoid breaking the main operation
@@ -104,7 +104,7 @@ class ActivityLog {
   // Find activity log by ID with user details
   static async findById(id) {
     try {
-      const row = await query(
+      const rows = await query(
         `SELECT 
           ua.*, 
           u.name as user_name, 
@@ -112,9 +112,10 @@ class ActivityLog {
           u.role as user_role
         FROM user_activity ua
         LEFT JOIN users u ON ua.user_id = u.id
-        WHERE ua.id = ?`,
+        WHERE ua.id = $1`,
         [id]
       );
+      const row = rows[0];
       
       if (!row) return null;
       
@@ -151,24 +152,25 @@ class ActivityLog {
       const offset = (page - 1) * limit;
       const whereClauses = [];
       const params = [];
+      let paramIndex = 1;
       
       if (action) {
-        whereClauses.push('activity_type = ?');
+        whereClauses.push(`activity_type = $${paramIndex++}`);
         params.push(action);
       }
       
       if (userId) {
-        whereClauses.push('al.user_id = ?');
+        whereClauses.push(`al.user_id = $${paramIndex++}`);
         params.push(userId);
       }
       
       if (startDate) {
-        whereClauses.push('created_at >= ?');
+        whereClauses.push(`created_at >= $${paramIndex++}`);
         params.push(new Date(startDate).toISOString());
       }
       
       if (endDate) {
-        whereClauses.push('created_at <= ?');
+        whereClauses.push(`created_at <= $${paramIndex++}`);
         params.push(new Date(endDate).toISOString());
       }
       
@@ -176,10 +178,10 @@ class ActivityLog {
       
       // Get total count
       const countResult = await query(
-        `SELECT COUNT(*) as total FROM user_activity ${whereClause}`, 
+        `SELECT COUNT(*) as total FROM user_activity al ${whereClause}`, 
         params
       );
-      const total = countResult ? countResult.total : 0;
+      const total = countResult.length > 0 ? countResult[0].total : 0;
       
       // Validate sort column to prevent SQL injection
       const validSortColumns = ['id', 'user_id', 'activity_type', 'created_at'];
@@ -197,7 +199,7 @@ class ActivityLog {
         LEFT JOIN users u ON al.user_id = u.id
         ${whereClause} 
         ORDER BY al.${sortColumn === 'createdAt' ? 'created_at' : sortColumn} ${sortDirection}
-        LIMIT ? OFFSET ?`,
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
         [...params, limit, offset]
       );
 

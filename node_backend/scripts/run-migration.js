@@ -1,36 +1,36 @@
-const { connectDB, getDB } = require('../src/config/db');
-const logger = require('../src/utils/logger');
+#!/usr/bin/env node
+
+const DatabaseMigrator = require('./migrate-to-postgresql');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-async function runMigration() {
-  const migrationFileName = process.argv[2]; // Get migration file name from command line argument
+console.log('🚀 Starting SQLite to PostgreSQL Migration...');
+console.log('=====================================');
 
-  if (!migrationFileName) {
-    logger.error('Usage: node scripts/run-migration.js <migration-file-name>');
+// Check if PostgreSQL configuration is provided
+if (!process.env.DB_PASSWORD || process.env.DB_PASSWORD === 'your_password_here') {
+    console.error('❌ Please set your PostgreSQL password in the .env file');
+    console.log('📝 Create a .env file with the following content:');
+    console.log(`
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=pms_database
+DB_USER=postgres
+DB_PASSWORD=your_actual_password
+    `);
     process.exit(1);
-  }
-
-  try {
-    logger.info(`🔄 Running migration: ${migrationFileName}`);
-    await connectDB(); // Connect to the database
-
-    const db = getDB(); // Get the sqlite3 database instance
-
-    const migrationPath = path.join(__dirname, '../migrations', migrationFileName);
-    const migration = require(migrationPath);
-
-    if (typeof migration.up === 'function') {
-      await migration.up(db);
-      logger.info(`✅ Migration ${migrationFileName} completed successfully.`);
-    } else {
-      logger.error(`❌ Migration ${migrationFileName} does not have an 'up' function.`);
-    }
-
-    process.exit(0);
-  } catch (error) {
-    logger.error(`❌ Error running migration ${migrationFileName}:`, error);
-    process.exit(1);
-  }
 }
 
-runMigration();
+const migrator = new DatabaseMigrator();
+migrator.migrate()
+    .then(() => {
+        console.log('🎉 Migration completed successfully!');
+        console.log('📝 Next steps:');
+        console.log('1. Set DB_TYPE=postgresql in your .env file');
+        console.log('2. Restart your application');
+        process.exit(0);
+    })
+    .catch((error) => {
+        console.error('❌ Migration failed:', error);
+        process.exit(1);
+    });

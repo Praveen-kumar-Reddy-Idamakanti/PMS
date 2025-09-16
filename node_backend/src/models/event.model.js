@@ -1,96 +1,92 @@
-
-const { getDB } = require('../config/db');
+const { query, run } = require('../config/db');
 
 class Event {
-    static create(eventData) {
+    static async create(eventData) {
         const { title, description, date_time, location, created_by, image_url } = eventData;
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            const stmt = db.prepare('INSERT INTO events (title, description, date_time, location, created_by, image_url) VALUES (?, ?, ?, ?, ?, ?)');
-            stmt.run(title, description, new Date(date_time).toISOString(), location, created_by, image_url, function (err) {
-                if (err) {
-                    return reject(err);
-                }
-                resolve({ id: this.lastID, ...eventData });
-            });
-            stmt.finalize();
-        });
+        const sql = 'INSERT INTO events (title, description, date_time, location, created_by, image_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id';
+        const params = [title, description, new Date(date_time).toISOString(), location, created_by, image_url];
+        
+        try {
+            const result = await run(sql, params);
+            return { id: result.rows[0].id, ...eventData };
+        } catch (err) {
+            console.error('Error creating event:', err);
+            throw err;
+        }
     }
 
-    static findAll() {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            db.all('SELECT * FROM events WHERE date_time >= ? ORDER BY date_time', [new Date().toISOString()], (err, rows) => {
-                if (err) {
-                    return reject(err);
-                }
-                const events = rows.map(event => ({
-                    ...event,
-                    date_time: new Date(event.date_time).toISOString(),
-                }));
-                resolve(events);
-            });
-        });
+    static async findAll() {
+        const sql = 'SELECT * FROM events WHERE date_time >= $1 ORDER BY date_time';
+        const params = [new Date().toISOString()];
+        
+        try {
+            const rows = await query(sql, params);
+            return rows.map(event => ({
+                ...event,
+                date_time: new Date(event.date_time).toISOString(),
+            }));
+        } catch (err) {
+            console.error('Error finding all events:', err);
+            throw err;
+        }
     }
 
-    static findPast() {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            db.all('SELECT * FROM events WHERE date_time < ? ORDER BY date_time DESC', [new Date().toISOString()], (err, rows) => {
-                if (err) {
-                    return reject(err);
-                }
-                const events = rows.map(event => ({
-                    ...event,
-                    date_time: new Date(event.date_time).toISOString(),
-                }));
-                resolve(events);
-            });
-        });
+    static async findPast() {
+        const sql = 'SELECT * FROM events WHERE date_time < $1 ORDER BY date_time DESC';
+        const params = [new Date().toISOString()];
+
+        try {
+            const rows = await query(sql, params);
+            return rows.map(event => ({
+                ...event,
+                date_time: new Date(event.date_time).toISOString(),
+            }));
+        } catch (err) {
+            console.error('Error finding past events:', err);
+            throw err;
+        }
     }
 
-    static findById(id) {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            db.get('SELECT * FROM events WHERE id = ?', [id], (err, row) => {
-                if (err) {
-                    return reject(err);
-                }
-                if (row) {
-                    row.date_time = new Date(row.date_time).toISOString();
-                }
-                resolve(row);
-            });
-        });
+    static async findById(id) {
+        const sql = 'SELECT * FROM events WHERE id = $1';
+        
+        try {
+            const rows = await query(sql, [id]);
+            const row = rows[0];
+            if (row) {
+                row.date_time = new Date(row.date_time).toISOString();
+            }
+            return row;
+        } catch (err) {
+            console.error(`Error finding event by id ${id}:`, err);
+            throw err;
+        }
     }
 
-    static update(id, eventData) {
+    static async update(id, eventData) {
         const { title, description, date_time, location, image_url } = eventData;
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            const stmt = db.prepare('UPDATE events SET title = ?, description = ?, date_time = ?, location = ?, image_url = ? WHERE id = ?');
-            stmt.run(title, description, new Date(date_time).toISOString(), location, image_url, id, function (err) {
-                if (err) {
-                    return reject(err);
-                }
-                resolve({ id, ...eventData });
-            });
-            stmt.finalize();
-        });
+        const sql = 'UPDATE events SET title = $1, description = $2, date_time = $3, location = $4, image_url = $5 WHERE id = $6';
+        const params = [title, description, new Date(date_time).toISOString(), location, image_url, id];
+
+        try {
+            await run(sql, params);
+            return { id, ...eventData };
+        } catch (err) {
+            console.error(`Error updating event ${id}:`, err);
+            throw err;
+        }
     }
 
-    static delete(id) {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            const stmt = db.prepare('DELETE FROM events WHERE id = ?');
-            stmt.run(id, function (err) {
-                if (err) {
-                    return reject(err);
-                }
-                resolve({ id });
-            });
-            stmt.finalize();
-        });
+    static async delete(id) {
+        const sql = 'DELETE FROM events WHERE id = $1';
+
+        try {
+            await run(sql, [id]);
+            return { id };
+        } catch (err) {
+            console.error(`Error deleting event ${id}:`, err);
+            throw err;
+        }
     }
 }
 

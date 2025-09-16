@@ -60,37 +60,39 @@ exports.getAllAttendance = async (req, res, next) => {
     `;
     const params = [];
 
+    let paramIndex = 1;
+    
     // If user is HR or Team Leader, only show their team's attendance
     if (currentUserRole === 'hr' || currentUserRole === 'team_leader') {
-      sqlQuery += ' AND u.role IN (?, ?, ?)';
+      sqlQuery += ` AND u.role IN ($${paramIndex++}, $${paramIndex++}, $${paramIndex++})`;
       params.push('team_leader', 'employee', 'intern');
     }
     
     if (startDate) {
-      sqlQuery += ' AND timestamp >= ?';
+      sqlQuery += ` AND timestamp >= $${paramIndex++}`;
       params.push(new Date(startDate).toISOString());
     }
     
     if (endDate) {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);  // Set to end of the day
-      sqlQuery += ' AND timestamp <= ?';
+      sqlQuery += ` AND timestamp <= $${paramIndex++}`;
       params.push(end.toISOString());
     }
     
     if (user_id) {
-      sqlQuery += ' AND a.user_id = ?';
+      sqlQuery += ` AND a.user_id = $${paramIndex++}`;
       params.push(user_id);
     }
     
     if (status) {
-      sqlQuery += ' AND status = ?';
+      sqlQuery += ` AND status = $${paramIndex++}`;
       params.push(status);
     }
     
     // If specific date is provided, filter by that date
     if (date) {
-      sqlQuery += ' AND DATE(a.timestamp) = ?';
+      sqlQuery += ` AND DATE(a.timestamp) = $${paramIndex++}`;
       params.push(date);
     }
     
@@ -215,7 +217,7 @@ exports.updateAttendanceStatus = async (req, res, next) => {
       `SELECT a.*, u.name, u.email 
        FROM attendance a
        JOIN users u ON a.user_id = u.id
-       WHERE a.id = ?`, 
+       WHERE a.id = $1`, 
       [attendanceId]
     );
     
@@ -226,21 +228,22 @@ exports.updateAttendanceStatus = async (req, res, next) => {
     // Build update query
     const updates = [];
     const params = [];
+    let paramIndex = 1;
     
     if (status) {
-      updates.push('status = ?');
+      updates.push(`status = $${paramIndex++}`);
       params.push(status);
     }
     
     if (notes !== undefined) {
-      updates.push('notes = ?');
+      updates.push(`notes = $${paramIndex++}`);
       params.push(notes);
     }
     
     if (updates.length > 0) {
       params.push(attendanceId);
       await run(
-        `UPDATE attendance SET ${updates.join(', ')} WHERE id = ?`,
+        `UPDATE attendance SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
         params
       );
       
@@ -249,7 +252,7 @@ exports.updateAttendanceStatus = async (req, res, next) => {
         `SELECT a.*, u.name, u.email 
          FROM attendance a
          JOIN users u ON a.user_id = u.id
-         WHERE a.id = ?`,
+         WHERE a.id = $1`,
         [attendanceId]
       );
       
@@ -296,14 +299,15 @@ exports.getAttendanceStats = async (req, res, next) => {
     `;
     
     const params = [];
+    let paramIndex = 1;
     
     if (startDate) {
-      sqlQuery += ' AND DATE(a.timestamp) >= ?';
+      sqlQuery += ` AND DATE(a.timestamp) >= $${paramIndex++}`;
       params.push(startDate);
     }
     
     if (endDate) {
-      sqlQuery += ' AND DATE(a.timestamp) <= ?';
+      sqlQuery += ` AND DATE(a.timestamp) <= $${paramIndex++}`;
       params.push(endDate);
     }
     
@@ -386,7 +390,7 @@ exports.bulkUpdateAttendance = async (req, res, next) => {
       try {
         // Check if record exists
         const [existing] = await query(
-          'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
+          'SELECT * FROM attendance WHERE user_id = $1 AND date = $2',
           [update.userId, attendanceDate]
         );
         
@@ -394,28 +398,29 @@ exports.bulkUpdateAttendance = async (req, res, next) => {
           // Update existing record
           const updateFields = [];
           const params = [];
+          let paramIndex = 1;
           
           if (update.status) {
-            updateFields.push('status = ?');
+            updateFields.push(`status = $${paramIndex++}`);
             params.push(update.status);
           }
           
           if (update.notes !== undefined) {
-            updateFields.push('notes = ?');
+            updateFields.push(`notes = $${paramIndex++}`);
             params.push(update.notes);
           }
           
           if (updateFields.length > 0) {
             params.push(update.userId, attendanceDate);
             await run(
-              `UPDATE attendance SET ${updateFields.join(', ')} WHERE user_id = ? AND date = ?`,
+              `UPDATE attendance SET ${updateFields.join(', ')} WHERE user_id = $${paramIndex++} AND date = $${paramIndex++}`,
               params
             );
           }
         } else {
           // Insert new record
           await run(
-            'INSERT INTO attendance (user_id, date, status, notes) VALUES (?, ?, ?, ?)',
+            'INSERT INTO attendance (user_id, date, status, notes) VALUES ($1, $2, $3, $4)',
             [
               update.userId,
               attendanceDate,
@@ -430,7 +435,7 @@ exports.bulkUpdateAttendance = async (req, res, next) => {
           `SELECT a.*, u.name, u.email 
            FROM attendance a 
            JOIN users u ON a.user_id = u.id 
-           WHERE user_id = ? AND date = ?`,
+           WHERE user_id = $1 AND date = $2`,
           [update.userId, attendanceDate]
         );
         

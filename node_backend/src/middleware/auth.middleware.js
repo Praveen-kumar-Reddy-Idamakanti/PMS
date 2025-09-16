@@ -30,7 +30,7 @@ const authenticate = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
         
         // Get user from the database including employee_id
-        const [user] = await query('SELECT id, name, email, employee_id, role, is_active FROM users WHERE id = ?', [decoded.user.id]);
+        const [user] = await query('SELECT id, name, email, employee_id, role, is_active FROM users WHERE id = $1', [decoded.user.id]);
         
         if (!user) {
             logger.warn(`Authentication failed: User not found (ID: ${decoded.user.id})`);

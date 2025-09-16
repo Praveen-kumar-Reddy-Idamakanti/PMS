@@ -3,6 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const logger = require('../utils/logger');
 
+// Check if PostgreSQL is configured
+const usePostgreSQL = process.env.DB_TYPE === 'postgresql' || process.env.DB_HOST;
+
 // Use a relative path that works across different operating systems
 const dbPath = path.join(process.cwd(), 'data', 'database.sqlite');
 
@@ -16,96 +19,113 @@ if (!fs.existsSync(dataDir)) {
 let db;
 
 /**
- * Connects to the SQLite database and sets up connection settings
- * @returns {Promise<sqlite3.Database>} The database connection
+ * Connects to the database (SQLite or PostgreSQL) and sets up connection settings
+ * @returns {Promise<sqlite3.Database|Client>} The database connection
  */
-const connectDB = () => {
-    return new Promise((resolve, reject) => {
-        // Close existing connection if any
-        if (dbInstance) {
-            dbInstance.close();
-        }
-        
-        // Create new connection
-        dbInstance = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
-            if (err) {
-                logger.error('❌ Error connecting to the database:', err.message);
-                return reject(err);
+const connectDB = async () => {
+    if (usePostgreSQL) {
+        // Use PostgreSQL
+        const postgresql = require('./postgresql');
+        return await postgresql.connectDB();
+    } else {
+        // Use SQLite (default)
+        return new Promise((resolve, reject) => {
+            // Close existing connection if any
+            if (dbInstance) {
+                dbInstance.close();
             }
             
-            // Enable foreign key support and other performance optimizations
-            dbInstance.serialize(() => {
-                // Enable foreign key constraints
-                dbInstance.run('PRAGMA foreign_keys = ON');
+            // Create new connection
+            dbInstance = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+                if (err) {
+                    logger.error('❌ Error connecting to the database:', err.message);
+                    return reject(err);
+                }
                 
-                // Set journal mode to WAL for better concurrency
-                dbInstance.run('PRAGMA journal_mode = WAL');
-                
-                // Set synchronous to NORMAL for better performance
-                dbInstance.run('PRAGMA synchronous = NORMAL');
-                
-                // Set cache size (in pages, 1 page = 4KB)
-                dbInstance.run('PRAGMA cache_size = -2000'); // 8MB cache
-                
-                // Set busy timeout to 5 seconds
-                dbInstance.run('PRAGMA busy_timeout = 5000');
-                
-                // Set the global db reference
-                db = dbInstance;
-                
-                logger.info('✅ Connected to SQLite database with optimized settings');
-                resolve(dbInstance);
+                // Enable foreign key support and other performance optimizations
+                dbInstance.serialize(() => {
+                    // Enable foreign key constraints
+                    dbInstance.run('PRAGMA foreign_keys = ON');
+                    
+                    // Set journal mode to WAL for better concurrency
+                    dbInstance.run('PRAGMA journal_mode = WAL');
+                    
+                    // Set synchronous to NORMAL for better performance
+                    dbInstance.run('PRAGMA synchronous = NORMAL');
+                    
+                    // Set cache size (in pages, 1 page = 4KB)
+                    dbInstance.run('PRAGMA cache_size = -2000'); // 8MB cache
+                    
+                    // Set busy timeout to 5 seconds
+                    dbInstance.run('PRAGMA busy_timeout = 5000');
+                    
+                    // Set the global db reference
+                    db = dbInstance;
+                    
+                    logger.info('✅ Connected to SQLite database with optimized settings');
+                    resolve(dbInstance);
+                });
+            });
+            
+            // Handle database errors
+            dbInstance.on('error', (err) => {
+                logger.error('Database error:', err);
+                // Attempt to recover from errors
+                if (err.code === 'SQLITE_BUSY' || err.code === 'SQLITE_LOCKED') {
+                    logger.warn('Database is locked, retrying...');
+                    // You might want to implement retry logic here
+                }
             });
         });
-        
-        // Handle database errors
-        dbInstance.on('error', (err) => {
-            logger.error('Database error:', err);
-            // Attempt to recover from errors
-            if (err.code === 'SQLITE_BUSY' || err.code === 'SQLITE_LOCKED') {
-                logger.warn('Database is locked, retrying...');
-                // You might want to implement retry logic here
-            }
-        });
-    });
+    }
 };
 
 /**
  * Gets the database connection instance
- * @returns {sqlite3.Database} The database connection
+ * @returns {sqlite3.Database|Client} The database connection
  * @throws {Error} If the database is not connected
  */
 const getDB = () => {
-    if (!dbInstance) {
-        console.error('Database not connected. Call connectDB() first.');
-        throw new Error('Database not connected. Call connectDB() first.');
+    if (usePostgreSQL) {
+        const postgresql = require('./postgresql');
+        return postgresql.getDB();
+    } else {
+        if (!dbInstance) {
+            console.error('Database not connected. Call connectDB() first.');
+            throw new Error('Database not connected. Call connectDB() first.');
+        }
+        return dbInstance;
     }
-    return dbInstance;
 };
 
 /**
  * Closes the database connection
  * @returns {Promise<void>}
  */
-const closeDB = () => {
-    return new Promise((resolve, reject) => {
-        if (!module.exports.db) {
-            logger.warn('No active database connection to close');
-            return resolve();
-        }
-        
-        const db = module.exports.db;
-        module.exports.db = null; // Clear reference first to prevent new operations
-        
-        db.close((err) => {
-            if (err) {
-                logger.error('Error closing database:', err.message);
-                return reject(err);
+const closeDB = async () => {
+    if (usePostgreSQL) {
+        const postgresql = require('./postgresql');
+        return await postgresql.closeDB();
+    } else {
+        return new Promise((resolve, reject) => {
+            if (!dbInstance) {
+                logger.warn('No active database connection to close');
+                return resolve();
             }
-            logger.info('🔌 Database connection closed');
-            resolve();
+            
+            const db = dbInstance;
+            dbInstance = null; // Clear reference first to prevent new operations
+            
+            db.close((err) => {
+                if (err) {
+                    logger.error('Error closing database:', err.message);
+                    return reject(err);
+                }
+                logger.info('🔌 Database connection closed');
+                resolve();
+            });
         });
-    });
+    }
 };
 
 /**
@@ -114,25 +134,32 @@ const closeDB = () => {
  * @param {Array} params - Query parameters
  * @returns {Promise<Array>} The query results
  */
-const query = (sql, params = []) => {
-    return new Promise((resolve, reject) => {
-        const startTime = Date.now();
-        db.serialize(() => {
-            db.all(sql, params, (err, rows) => {
-                const duration = Date.now() - startTime;
-                if (err) {
-                    console.error('❌ Query error:', {
-                        sql,
-                        params,
-                        error: err.message,
-                        duration: `${duration}ms`
-                    });
-                    return reject(err);
-                }
-                resolve(rows || []);
+const query = async (sql, params = []) => {
+    if (usePostgreSQL) {
+        const postgresql = require('./postgresql');
+        return await postgresql.query(sql, params);
+    } else {
+        // Convert PostgreSQL placeholders to SQLite placeholders
+        const sqliteSql = sql.replace(/\$(\d+)/g, '?');
+        return new Promise((resolve, reject) => {
+            const startTime = Date.now();
+            db.serialize(() => {
+                db.all(sqliteSql, params, (err, rows) => {
+                    const duration = Date.now() - startTime;
+                    if (err) {
+                        console.error('❌ Query error:', {
+                            sql: sqliteSql,
+                            params,
+                            error: err.message,
+                            duration: `${duration}ms`
+                        });
+                        return reject(err);
+                    }
+                    resolve(rows || []);
+                });
             });
         });
-    });
+    }
 };
 
 /**
@@ -142,22 +169,30 @@ const query = (sql, params = []) => {
  * @returns {Promise<{lastID: number, changes: number}>}
  */
 const run = async (sql, params = []) => {
-    const db = getDB();
-    
-    // Log the query for debugging (without sensitive data)
-    const logParams = params.length > 0 ? ` [${params.map(p => typeof p === 'string' ? `'${p}'` : p).join(', ')}]` : '';
-    logger.debug(`SQL: ${sql}${logParams}`);
-    
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function(err) {
-            if (err) {
-                logger.error('Query error:', { sql, params, error: err.message });
-                return reject(err);
-            }
-            resolve({ lastID: this.lastID, changes: this.changes });
-            logger.debug(`SQL Run successful: ${sql} | lastID: ${this.lastID}, changes: ${this.changes}`);
+    if (usePostgreSQL) {
+        const postgresql = require('./postgresql');
+        return await postgresql.run(sql, params);
+    } else {
+        const db = getDB();
+        
+        // Convert PostgreSQL placeholders to SQLite placeholders
+        const sqliteSql = sql.replace(/\$(\d+)/g, '?');
+        
+        // Log the query for debugging (without sensitive data)
+        const logParams = params.length > 0 ? ` [${params.map(p => typeof p === 'string' ? `'${p}'` : p).join(', ')}]` : '';
+        logger.debug(`SQL: ${sqliteSql}${logParams}`);
+        
+        return new Promise((resolve, reject) => {
+            db.run(sqliteSql, params, function(err) {
+                if (err) {
+                    logger.error('Query error:', { sql: sqliteSql, params, error: err.message });
+                    return reject(err);
+                }
+                resolve({ lastID: this.lastID, changes: this.changes });
+                logger.debug(`SQL Run successful: ${sqliteSql} | lastID: ${this.lastID}, changes: ${this.changes}`);
+            });
         });
-    });
+    }
 };
 
 // Initialize the db instance

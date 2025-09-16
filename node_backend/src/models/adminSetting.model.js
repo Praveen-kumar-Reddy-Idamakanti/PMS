@@ -13,7 +13,7 @@ class AdminSetting {
     const sql = `
       INSERT INTO admin_settings (
         user_id, company_name, timezone, location_check_in, photo_check_in, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
     `;
     
     const params = [
@@ -27,7 +27,7 @@ class AdminSetting {
     ];
     
     const result = await run(sql, params);
-    return this.getById(result.lastID);
+    return this.getById(result.rows[0].id);
   }
 
   /**
@@ -36,7 +36,7 @@ class AdminSetting {
    * @returns {Promise<Object|null>} The settings or null if not found
    */
   static async getById(id) {
-    const sql = 'SELECT * FROM admin_settings WHERE id = ?';
+    const sql = 'SELECT * FROM admin_settings WHERE id = $1';
     const rows = await query(sql, [id]);
     return rows[0] || null;
   }
@@ -47,7 +47,7 @@ class AdminSetting {
    * @returns {Promise<Object|null>} The settings or null if not found
    */
   static async getByUserId(userId) {
-    const sql = 'SELECT * FROM admin_settings WHERE user_id = ?';
+    const sql = 'SELECT * FROM admin_settings WHERE user_id = $1';
     const rows = await query(sql, [userId]);
     return rows[0] || null;
   }
@@ -71,18 +71,20 @@ class AdminSetting {
       return this.getById(id);
     }
 
-    const setClause = Object.keys(validUpdates)
-      .map(key => `${key} = ?`)
-      .join(', ');
+    const updateKeys = Object.keys(validUpdates);
+    const params = Object.values(validUpdates);
     
-    const params = [...Object.values(validUpdates), id];
+    let paramIndex = 1;
+    const setClause = updateKeys.map(key => `${key} = $${paramIndex++}`).join(', ');
+
     const sql = `
       UPDATE admin_settings 
-      SET ${setClause}, updated_at = ? 
-      WHERE id = ?
+      SET ${setClause}, updated_at = $${paramIndex++}
+      WHERE id = $${paramIndex++}
     `;
     
-    params.splice(-1, 0, new Date().toISOString());
+    params.push(new Date().toISOString());
+    params.push(id);
     
     await run(sql, params);
     return this.getById(id);

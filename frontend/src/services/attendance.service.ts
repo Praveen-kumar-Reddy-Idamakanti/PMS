@@ -299,11 +299,44 @@ const getTodaysStatus = async () => {
       const remoteResponse = await fetchWithAuth(`/remote-attendance/my-requests?startDate=${today}&endDate=${today}`);
       if (remoteResponse.ok) {
         const remoteRequests = await remoteResponse.json();
+        console.log('[DEBUG] Remote requests received:', remoteRequests);
+        console.log('[DEBUG] Looking for today:', today);
+        
         const todayRequest = Array.isArray(remoteRequests)
-          ? remoteRequests.find((req: any) => req.request_date === today && (req.status === 'approved' || req.status === 'pending'))
+          ? remoteRequests.find((req: any) => {
+              // Handle both string and Date object formats
+              const reqDate = req.request_date;
+              let reqDateStr;
+              
+              if (reqDate instanceof Date) {
+                reqDateStr = reqDate.toISOString().split('T')[0]; // Convert Date to YYYY-MM-DD
+              } else if (typeof reqDate === 'string') {
+                // Handle ISO string format - extract just the date part
+                reqDateStr = reqDate.split('T')[0]; // Extract YYYY-MM-DD from ISO string
+              } else {
+                reqDateStr = reqDate;
+              }
+              
+              console.log('[DEBUG] Comparing dates:', { 
+                originalReqDate: reqDate, 
+                reqDateStr, 
+                today, 
+                match: reqDateStr === today,
+                status: req.status 
+              });
+              
+              // Check if the request date matches today AND the status is approved or pending
+              const dateMatches = reqDateStr === today;
+              const statusMatches = req.status === 'approved' || req.status === 'pending';
+              
+              console.log('[DEBUG] Match criteria:', { dateMatches, statusMatches, finalMatch: dateMatches && statusMatches });
+              
+              return dateMatches && statusMatches;
+            })
           : null;
 
         if (todayRequest) {
+          console.log('[DEBUG] Found today request:', todayRequest);
           attendanceStatus = {
             ...attendanceStatus,
             status: todayRequest.status === 'approved' ? 'checked_in' : 'pending_approval',
@@ -312,6 +345,7 @@ const getTodaysStatus = async () => {
             isRemote: true,
             remoteRequest: todayRequest
           };
+          console.log('[DEBUG] Updated attendance status:', attendanceStatus);
 
           // If approved but no actual check-in record exists, default to 10:00 AM local and compute hours
           if (todayRequest.status === 'approved' && !attendanceStatus.checkInTime) {

@@ -27,28 +27,24 @@ async function getTaskWithAssociations(taskId, userId = null) {
       T.*, 
       U1.name AS assignedToUserName, U1.email AS assignedToUserEmail, 
       U2.name AS assignedByUserName, U2.email AS assignedByUserEmail
-    FROM Tasks T
-    LEFT JOIN users U1 ON T.assignedTo = U1.id
-    LEFT JOIN users U2 ON T.assignedBy = U2.id
-    WHERE T.id = ?`,
+    FROM "Tasks" T
+    LEFT JOIN users U1 ON T.assignedto = U1.id
+    LEFT JOIN users U2 ON T.assignedby = U2.id
+    WHERE T.id = $1`,
     [taskId]
   );
 
   if (!task || task.length === 0) return null;
 
-  // Get all subtasks for the task
   const subtasks = await query(
-    'SELECT id, title, completed, taskId, assignedTo, assignedBy, completedBy, completedAt, completionDescription FROM SubTasks WHERE taskId = ?',
+    'SELECT id, title, completed, "taskId", assignedto, assignedby, completedby, completedat, completiondescription FROM "SubTasks" WHERE "taskId" = $1',
     [taskId]
   );
   
-  // Note: We're no longer filtering subtasks here as we want to show all subtasks
-  // The frontend will handle access control for modifying them
-  
   const tags = await query(
-    `SELECT T.id, T.name FROM Tags T
-     JOIN TaskTags TT ON T.id = TT.tagId
-     WHERE TT.taskId = ?`,
+    `SELECT T.id, T.name FROM "Tags" T
+     JOIN "TaskTags" TT ON T.id = TT."tagId"
+     WHERE TT."taskId" = $1`,
     [taskId]
   );
 
@@ -58,30 +54,28 @@ async function getTaskWithAssociations(taskId, userId = null) {
   result.assignedToUser = result.assignedToUserName ? { id: result.assignedTo, name: result.assignedToUserName, email: result.assignedToUserEmail } : null;
   result.assignedByUser = result.assignedByUserName ? { id: result.assignedBy, name: result.assignedByUserName, email: result.assignedByUserEmail } : null;
   
-  // Clean up redundant fields
   delete result.assignedToUserName;
   delete result.assignedToUserEmail;
   delete result.assignedByUserName;
   delete result.assignedByUserEmail;
 
-  logger.debug(`[getTaskWithAssociations] Returning Task with Associations: ${JSON.stringify(result)}`); // Debug log
+  logger.debug(`[getTaskWithAssociations] Returning Task with Associations: ${JSON.stringify(result)}`);
   return result;
 }
 
 // Create a new task
 const createTask = async (req, res) => {
   const { title, description, status, priority, assignedTo, assignedBy, dueDate, progress, tags, subtasks } = req.body;
-  const userId = req.user ? req.user.id : assignedBy; // Use authenticated user ID or fallback to assignedBy
+  const userId = req.user ? req.user.id : assignedBy;
   
   try {
     const result = await run(
-      `INSERT INTO Tasks (title, description, status, priority, assignedTo, assignedBy, dueDate, progress, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        `INSERT INTO "Tasks" (title, description, status, priority, assignedto, assignedby, duedate, progress, createdat, updatedat)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
       [title, description, status, priority, assignedTo, assignedBy, dueDate, progress]
     );
-    const newTaskId = result.lastID;
+    const newTaskId = result.rows[0].id;
 
-    // Log task creation
     await logTaskActivity(userId, newTaskId, ACTIVITY_TYPES.TASK_CREATE, {
       title,
       status,
@@ -90,7 +84,6 @@ const createTask = async (req, res) => {
       dueDate
     });
 
-    // Log task assignment if assigned to someone
     if (assignedTo) {
       await logTaskActivity(userId, newTaskId, ACTIVITY_TYPES.TASK_ASSIGN, {
         assignedTo,
@@ -100,23 +93,23 @@ const createTask = async (req, res) => {
 
     if (tags && tags.length > 0) {
       for (const tagName of tags) {
-        let tag = await query('SELECT id FROM Tags WHERE name = ?', [tagName]);
+        let tag = await query('SELECT id FROM "Tags" WHERE name = $1', [tagName]);
         let tagId;
         if (tag.length === 0) {
-          const newTagResult = await run('INSERT INTO Tags (name, createdAt, updatedAt) VALUES (?, datetime(\'now\'), datetime(\'now\'))', [tagName]);
-          tagId = newTagResult.lastID;
+          const newTagResult = await run('INSERT INTO "Tags" (name, createdat, updatedat) VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id', [tagName]);
+          tagId = newTagResult.rows[0].id;
         } else {
           tagId = tag[0].id;
         }
-        await run('INSERT INTO TaskTags (taskId, tagId, createdAt, updatedAt) VALUES (?, ?, datetime(\'now\'), datetime(\'now\'))', [newTaskId, tagId]);
+        await run('INSERT INTO "TaskTags" ("taskId", "tagId", "createdAt", "updatedAt") VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)', [newTaskId, tagId]);
       }
     }
 
     if (subtasks && subtasks.length > 0) {
       for (const subtask of subtasks) {
         await run(
-          `INSERT INTO SubTasks (title, status, taskId, createdAt, updatedAt)
-           VALUES (?, ?, ?, datetime(\'now\'), datetime(\'now\'))`,
+          `INSERT INTO "SubTasks" (title, status, taskId, createdAt, updatedAt)
+          VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
           [subtask.title, subtask.status || 'todo', newTaskId]
         );
       }
@@ -135,25 +128,26 @@ const getAllTasks = async (req, res) => {
   const { status, priority, assignedTo, assignedBy, search } = req.query;
   let whereClauses = [];
   let params = [];
+  let paramIndex = 1;
 
   if (status) {
-    whereClauses.push('T.status = ?');
+    whereClauses.push(`T.status = $${paramIndex++}`);
     params.push(status);
   }
   if (priority) {
-    whereClauses.push('T.priority = ?');
+    whereClauses.push(`T.priority = $${paramIndex++}`);
     params.push(priority);
   }
   if (assignedTo) {
-    whereClauses.push('T.assignedTo = ?');
+    whereClauses.push(`T.assignedto = $${paramIndex++}`);
     params.push(assignedTo);
   }
   if (assignedBy) {
-    whereClauses.push('T.assignedBy = ?');
+    whereClauses.push(`T.assignedby = $${paramIndex++}`);
     params.push(assignedBy);
   }
   if (search) {
-    whereClauses.push('(T.title LIKE ? OR T.description LIKE ?)');
+    whereClauses.push(`(T.title LIKE $${paramIndex++} OR T.description LIKE $${paramIndex++})`);
     params.push(`%${search}%`, `%${search}%`);
   }
 
@@ -165,21 +159,20 @@ const getAllTasks = async (req, res) => {
         T.*, 
         U1.name AS assignedToUserName, U1.email AS assignedToUserEmail, 
         U2.name AS assignedByUserName, U2.email AS assignedByUserEmail
-      FROM Tasks T
-      LEFT JOIN users U1 ON T.assignedTo = U1.id
-      LEFT JOIN users U2 ON T.assignedBy = U2.id
+      FROM "Tasks" T
+      LEFT JOIN users U1 ON T.assignedto = U1.id
+      LEFT JOIN users U2 ON T.assignedby = U2.id
       ${whereSql}
-      ORDER BY T.createdAt DESC`,
+        ORDER BY T.createdat DESC`,
       params
     );
 
-    // Manually fetch subtasks and tags for each task
     const tasksWithAssociations = await Promise.all(tasks.map(async (task) => {
-      const subtasks = await query('SELECT * FROM SubTasks WHERE taskId = ?', [task.id]);
+      const subtasks = await query('SELECT * FROM "SubTasks" WHERE "taskId" = $1', [task.id]);
       const tags = await query(
-        `SELECT T.id, T.name FROM Tags T
-         JOIN TaskTags TT ON T.id = TT.tagId
-         WHERE TT.taskId = ?`,
+        `SELECT T.id, T.name FROM "Tags" T
+         JOIN "TaskTags" TT ON T.id = TT."tagId"
+         WHERE TT."taskId" = $1`,
         [task.id]
       );
       task.subtasks = subtasks;
@@ -225,7 +218,7 @@ const updateTask = async (req, res) => {
   const userId = req.user ? req.user.id : null;
   
   try {
-    const task = await query('SELECT * FROM Tasks WHERE id = ?', [id]);
+    const task = await query('SELECT * FROM Tasks WHERE id = $1', [id]);
     if (!task || task.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -234,20 +227,17 @@ const updateTask = async (req, res) => {
     const isStatusChanging = status && currentTask.status !== status;
     const isAssignmentChanging = assignedTo !== undefined && currentTask.assignedTo !== assignedTo;
     
-    // Check if status is being updated to 'Completed' or 'Done'
     if (isStatusChanging && (status === 'Completed' || status === 'Done')) {
-      // Log task completion
       await logTaskActivity(userId, id, ACTIVITY_TYPES.TASK_COMPLETE, {
         oldStatus: currentTask.status,
         newStatus: status,
-        completedAt: new Date().toISOString()
+         completedAt: new Date().toISOString()
       });
       
-      // Update task with completedAt
       await run(
         `UPDATE Tasks 
-         SET title = ?, description = ?, status = ?, priority = ?, assignedTo = ?, dueDate = ?, progress = ?, completedAt = datetime('now'), updatedAt = datetime('now') 
-         WHERE id = ?`,
+         SET title = $1, description = $2, status = $3, priority = $4, assignedto = $5, duedate = $6, progress = $7, completedat = CURRENT_TIMESTAMP, updatedat = CURRENT_TIMESTAMP 
+         WHERE id = $8`,
         [
           title || currentTask.title,
           description !== undefined ? description : currentTask.description,
@@ -260,11 +250,10 @@ const updateTask = async (req, res) => {
         ]
       );
     } else {
-      // For any other update
       await run(
         `UPDATE Tasks 
-         SET title = ?, description = ?, status = ?, priority = ?, assignedTo = ?, dueDate = ?, progress = ?, updatedAt = datetime('now') 
-         WHERE id = ?`,
+         SET title = $1, description = $2, status = $3, priority = $4, assignedto = $5, duedate = $6, progress = $7, updatedat = CURRENT_TIMESTAMP 
+         WHERE id = $8`,
         [
           title || currentTask.title,
           description !== undefined ? description : currentTask.description,
@@ -277,7 +266,6 @@ const updateTask = async (req, res) => {
         ]
       );
       
-      // Log status change if applicable
       if (isStatusChanging) {
         await logTaskActivity(userId, id, ACTIVITY_TYPES.TASK_UPDATE, {
           field: 'status',
@@ -286,7 +274,6 @@ const updateTask = async (req, res) => {
         });
       }
       
-      // Log assignment change if applicable
       if (isAssignmentChanging) {
         await logTaskActivity(userId, id, ACTIVITY_TYPES.TASK_ASSIGN, {
           assignedTo,
@@ -314,14 +301,13 @@ const deleteTask = async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
     
-    // Log task deletion
     await logTaskActivity(userId, id, ACTIVITY_TYPES.TASK_DELETE, {
       title: task.title,
       status: task.status,
       assignedTo: task.assignedTo
     });
     
-    await run('DELETE FROM Tasks WHERE id = ?', [id]);
+    await run('DELETE FROM Tasks WHERE id = $1', [id]);
     res.status(200).json({ message: 'Task deleted successfully' });
   } catch (error) {
     console.error('Error deleting task:', error);
@@ -338,9 +324,8 @@ const createSubtask = async (req, res) => {
   logger.debug(`[createSubtask] Request Body: ${JSON.stringify(req.body)}`);
   
   try {
-    // Get the task with assignee and assigner information
     const [task] = await query(
-      'SELECT id, assignedTo, assignedBy FROM Tasks WHERE id = ?', 
+        'SELECT id, assignedto, assignedby FROM Tasks WHERE id = $1', 
       [taskId]
     );
     
@@ -349,7 +334,6 @@ const createSubtask = async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
     
-    // Check if the user is authorized (either the assignee or assigner of the main task)
     if (userId && userId !== task.assignedTo && userId !== task.assignedBy) {
       logger.warn(`[createSubtask] User ${userId} not authorized to create subtasks for task ${taskId}`);
       return res.status(403).json({ 
@@ -357,12 +341,11 @@ const createSubtask = async (req, res) => {
       });
     }
     
-    // Set assignedBy to the current user if not provided
     const assignedBy = req.body.assignedBy || userId;
     
     const result = await run(
-      `INSERT INTO SubTasks (title, completed, taskId, assignedTo, assignedBy, completionDescription, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+       `INSERT INTO "SubTasks" (title, completed, taskId, assignedto, assignedby, completiondescription, createdAt, updatedAt)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
       [
         title, 
         completed || false, 
@@ -373,22 +356,21 @@ const createSubtask = async (req, res) => {
       ]
     );
     
-    // Fetch the newly created subtask with user details
     const [newSubtask] = await query(
       `SELECT st.*, 
               u1.name as assignedToName, u1.email as assignedToEmail,
               u2.name as assignedByName, u2.email as assignedByEmail
-       FROM SubTasks st
-       LEFT JOIN Users u1 ON st.assignedTo = u1.id
-       LEFT JOIN Users u2 ON st.assignedBy = u2.id
-       WHERE st.id = ?`, 
-      [result.lastID]
+       FROM "SubTasks" st
+       LEFT JOIN users u1 ON st.assignedto = u1.id
+       LEFT JOIN users u2 ON st.assignedby = u2.id
+       WHERE st.id = $1`, 
+      [result.rows[0].id]
     );
     
     logger.debug(`[createSubtask] Response: ${JSON.stringify(newSubtask)}`);
     res.status(201).json(newSubtask);
   } catch (error) {
-    logger.error(`[createSubtask] Error: ${error.message}`, error); // Debug log
+    logger.error(`[createSubtask] Error: ${error.message}`, error);
     res.status(500).json({ message: 'Error creating subtask', error: error.message });
   }
 };
@@ -399,7 +381,7 @@ const updateSubtask = async (req, res) => {
   const { taskId, subtaskId } = req.params;
   const { title, completed, assignedTo, assignedBy, completionDescription } = req.body;
   const userId = req.user ? req.user.id : null;
-  const completedAt = completed ? new Date().toISOString() : null;
+   const completedAt = completed ? new Date().toISOString() : null;
   
   if (!userId) {
     return res.status(401).json({ message: 'Authentication required' });
@@ -407,12 +389,11 @@ const updateSubtask = async (req, res) => {
 
   logger.debug(`[updateSubtask] Request Params: ${JSON.stringify(req.params)}, Request Body: ${JSON.stringify(req.body)}, User ID: ${userId}`);
   try {
-    // Get the subtask with task information
     const [existingSubtask] = await query(
-      `SELECT s.*, t.assignedTo as taskAssignedTo, t.assignedBy as taskAssignedBy 
-       FROM SubTasks s 
-       JOIN Tasks t ON s.taskId = t.id 
-       WHERE s.id = ? AND s.taskId = ?`, 
+       `SELECT s.*, t.assignedto as taskAssignedTo, t.assignedby as taskAssignedBy 
+        FROM "SubTasks" s 
+       JOIN Tasks t ON s."taskId" = t.id 
+       WHERE s.id = $1 AND s."taskId" = $2`,
       [subtaskId, taskId]
     );
     
@@ -421,12 +402,10 @@ const updateSubtask = async (req, res) => {
       return res.status(404).json({ message: 'Subtask not found or does not belong to this task' });
     }
     
-    // Check if the user is authorized to update the subtask
     const isSubtaskAssignee = existingSubtask.assignedTo === userId;
     const isSubtaskAssigner = existingSubtask.assignedBy === userId;
     const isTaskAssigner = existingSubtask.taskAssignedBy === userId;
     
-    // Allow subtask assignee, subtask assigner, or task assigner to modify
     if (!isSubtaskAssignee && !isSubtaskAssigner && !isTaskAssigner) {
       logger.warn(`[updateSubtask] User ${userId} not authorized to update subtask ${subtaskId}`);
       return res.status(403).json({ 
@@ -434,49 +413,47 @@ const updateSubtask = async (req, res) => {
       });
     }
 
-    // Merge existing values with updates from req.body
     const updatedFields = {
       title: title !== undefined ? title : existingSubtask.title,
       completed: completed !== undefined ? completed : existingSubtask.completed,
       assignedTo: assignedTo !== undefined ? (assignedTo || null) : existingSubtask.assignedTo,
       assignedBy: assignedBy !== undefined ? (assignedBy || null) : existingSubtask.assignedBy,
       completionDescription: completionDescription !== undefined ? (completionDescription || null) : existingSubtask.completionDescription,
-      completedBy: existingSubtask.completedBy, // Initialize with existing
-      completedAt: existingSubtask.completedAt // Initialize with existing
+      completedBy: existingSubtask.completedBy,
+       completedAt: existingSubtask.completedat
     };
 
-    // Logic to set/clear completedBy and completedAt based on 'completed' status change
-    if (!existingSubtask.completed && updatedFields.completed) { // Changed from oldCompletedStatus to existingSubtask.completed
+    if (!existingSubtask.completed && updatedFields.completed) {
       updatedFields.completedBy = userId;
-      updatedFields.completedAt = completedAt;
-    } else if (existingSubtask.completed && !updatedFields.completed) { // Changed from oldCompletedStatus to existingSubtask.completed
+      updatedFields.completedat = completedAt;
+    } else if (existingSubtask.completed && !updatedFields.completed) {
       updatedFields.completedBy = null;
-      updatedFields.completedAt = null;
-      updatedFields.completionDescription = null; // Clear description when uncompleted
+      updatedFields.completedat = null;
+      updatedFields.completionDescription = null;
     }
 
     logger.debug(`[updateSubtask] Updating with fields: ${JSON.stringify(updatedFields)}`);
     
     await run(
-      `UPDATE SubTasks SET title = ?, completed = ?, assignedTo = ?, assignedBy = ?, completedBy = ?, completedAt = ?, completionDescription = ?, updatedAt = datetime('now') WHERE id = ? AND taskId = ?`,
+      `UPDATE "SubTasks" SET title = $1, completed = $2, assignedto = $3, assignedby = $4, completedby = $5, completedat = $6, completiondescription = $7, updatedAt = CURRENT_TIMESTAMP WHERE id = $8 AND "taskId" = $9`,
       [
         updatedFields.title,
         updatedFields.completed,
         updatedFields.assignedTo,
-        updatedFields.assignedBy,
+         updatedFields.assignedBy,
         updatedFields.completedBy,
-        updatedFields.completedAt,
+        updatedFields.completedat,
         updatedFields.completionDescription,
         subtaskId,
         taskId
       ]
     );
     
-    const [updatedSubtask] = await query('SELECT * FROM SubTasks WHERE id = ? AND taskId = ?', [subtaskId, taskId]);
+    const [updatedSubtask] = await query('SELECT * FROM "SubTasks" WHERE id = $1 AND "taskId" = $2', [subtaskId, taskId]);
     logger.debug(`[updateSubtask] Response: ${JSON.stringify(updatedSubtask)}`);
     res.status(200).json(updatedSubtask);
   } catch (error) {
-    logger.error(`[updateSubtask] Error: ${error.message}`, error); // Debug log
+    logger.error(`[updateSubtask] Error: ${error.message}`, error);
     res.status(500).json({ message: 'Error updating subtask', error: error.message });
   }
 };
@@ -493,12 +470,11 @@ const deleteSubtask = async (req, res) => {
   }
   
   try {
-    // Get the subtask with task information
     const [existingSubtask] = await query(
       `SELECT s.*, t.assignedTo as taskAssignedTo, t.assignedBy as taskAssignedBy 
-       FROM SubTasks s 
+       FROM "SubTasks" s 
        JOIN Tasks t ON s.taskId = t.id 
-       WHERE s.id = ? AND s.taskId = ?`, 
+       WHERE s.id = $1 AND s.taskId = $2`, 
       [subtaskId, taskId]
     );
     
@@ -506,7 +482,6 @@ const deleteSubtask = async (req, res) => {
       return res.status(404).json({ message: 'Subtask not found or does not belong to this task' });
     }
     
-    // Check if the user is authorized (either the assignee or assigner of the subtask, or the task)
     const isAssignedTo = existingSubtask.assignedTo === userId;
     const isAssignedBy = existingSubtask.assignedBy === userId;
     const isTaskAssignee = existingSubtask.taskAssignedTo === userId;
@@ -517,7 +492,7 @@ const deleteSubtask = async (req, res) => {
         message: 'You are not authorized to delete this subtask' 
       });
     }
-    await run('DELETE FROM SubTasks WHERE id = ? AND taskId = ?', [subtaskId, taskId]); // Delete scoped to taskId
+    await run('DELETE FROM "SubTasks" WHERE id = $1 AND "taskId" = $2', [subtaskId, taskId]);
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting subtask:', error);

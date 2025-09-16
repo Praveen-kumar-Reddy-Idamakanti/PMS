@@ -7,7 +7,7 @@ const LeaveBalance = {
       `SELECT lb.*, lt.name as leave_type, lt.yearly_quota, lt.monthly_quota, lt.carry_forward_allowed, lt.carry_forward_limit
        FROM leave_balances lb
        JOIN leave_types lt ON lb.leave_type_id = lt.id
-       WHERE lb.user_id = ?
+       WHERE lb.user_id = $1
        ORDER BY lt.name`,
       [user_id]
     );
@@ -15,7 +15,7 @@ const LeaveBalance = {
 
   async get(user_id, leave_type_id, year) {
     const rows = await query(
-      `SELECT * FROM leave_balances WHERE user_id = ? AND leave_type_id = ? AND year = ?`,
+      `SELECT * FROM leave_balances WHERE user_id = $1 AND leave_type_id = $2 AND year = $3`,
       [user_id, leave_type_id, year]
     );
     return rows[0];
@@ -24,7 +24,7 @@ const LeaveBalance = {
   upsert(user_id, leave_type_id, year, balance) {
     return run(
       `INSERT INTO leave_balances (user_id, leave_type_id, year, balance)
-       VALUES (?, ?, ?, ?)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT(user_id, leave_type_id, year) DO UPDATE SET balance = excluded.balance, updated_at = CURRENT_TIMESTAMP`,
       [user_id, leave_type_id, year, balance]
     );

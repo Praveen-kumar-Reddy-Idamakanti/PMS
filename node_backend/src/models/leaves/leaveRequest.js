@@ -61,18 +61,12 @@ const LeaveRequest = {
       const year = startDate.getFullYear();
       const month = startDate.getMonth() + 1; // JavaScript months are 0-indexed
       
-      // console.log(`[LeaveRequest.create] Validated data - Start: ${startDate.toISOString()}, End: ${new Date(validatedData.end_date).toISOString()}, Days: ${days}`);
-    
-      // Get leave type details
-      // console.log(`[LeaveRequest.create] Fetching leave type with ID: ${validatedData.leave_type_id}`);
-      const [leaveType] = await query('SELECT * FROM leave_types WHERE id = ?', [validatedData.leave_type_id]);
+      const [leaveType] = await query('SELECT * FROM leave_types WHERE id = $1', [validatedData.leave_type_id]);
       if (!leaveType) {
         console.error(`[LeaveRequest.create] Error: Invalid leave type ID: ${validatedData.leave_type_id}`);
         throw new Error('Invalid leave type');
       }
-      // console.log(`[LeaveRequest.create] Found leave type: ${leaveType.name} (ID: ${leaveType.id})`);
       
-      // Additional validation for casual leave
       const leaveTypeName = leaveType.name.toLowerCase();
       const startMonth = startDate.getMonth();
       const startYear = startDate.getFullYear();
@@ -80,42 +74,26 @@ const LeaveRequest = {
       const endMonth = endDate.getMonth();
       const endYear = endDate.getFullYear();
       
-      // console.log(`[LeaveRequest.create] Date validation - Start: ${startYear}-${startMonth + 1}, End: ${endYear}-${endMonth + 1}`);
-      
-      // Check if it's a casual leave spanning months
       if (leaveTypeName.includes('casual') && leaveTypeName.includes('leave')) {
-        // console.log(`[LeaveRequest.create] Processing casual leave validation`);
         if (startYear !== endYear || startMonth !== endMonth) {
           console.error(`[LeaveRequest.create] Error: Casual leave spans multiple months - Start: ${startYear}-${startMonth + 1}, End: ${endYear}-${endMonth + 1}`);
           throw new Error('Casual leave cannot span more than one month');
         }
-        // console.log(`[LeaveRequest.create] Casual leave date range is within the same month`);
       }
       
-      // Check if this is a casual leave (case-insensitive check)
       if (leaveTypeName.includes('casual')) {
-        // console.log(`[LeaveRequest.create] Checking for existing casual leaves for user ${validatedData.user_id} in ${year}-${month}`);
-        
-        // Check for any casual leaves in the same month
         const queryStr = `
           SELECT lr.* FROM leave_requests lr
           JOIN leave_types lt ON lr.leave_type_id = lt.id
-          WHERE lr.user_id = ? 
+          WHERE lr.user_id = $1 
             AND LOWER(lt.name) LIKE '%casual%'
             AND lr.status NOT IN ('rejected', 'cancelled')
-            AND strftime('%Y-%m', lr.start_date) = ?`;
+            AND to_char(lr.start_date, 'YYYY-MM') = $2`;
         
         const yearMonth = `${year}-${month.toString().padStart(2, '0')}`;
         const queryParams = [validatedData.user_id, yearMonth];
         
-        // console.log('Checking for existing casual leaves in the same month with params:', { userId: validatedData.user_id, yearMonth });
-        
-        // console.log(`[LeaveRequest.create] Running query:`, queryStr.replace(/\s+/g, ' ').trim());
-        // console.log(`[LeaveRequest.create] Query params:`, queryParams);
-        
         const existingCasualLeaves = await query(queryStr, queryParams);
-        
-        // console.log(`[LeaveRequest.create] Found ${existingCasualLeaves.length} existing casual leaves in month ${yearMonth}`);
         
         if (existingCasualLeaves.length > 0) {
           const existingLeave = existingCasualLeaves[0];
@@ -130,12 +108,8 @@ const LeaveRequest = {
         }
       }
       
-      // Check leave balance but don't deduct yet
-      // console.log(`[LeaveRequest.create] Checking leave balance for user ${validatedData.user_id} in year ${year}`);
       const balance = await this.getLeaveBalance(validatedData.user_id, year);
-      // console.log(`[LeaveRequest.create] Current leave balance:`, balance);
       
-      // If no balance record exists, create one with default values
       if (!balance) {
         await LeaveBalance.upsert(
           validatedData.user_id,
@@ -145,25 +119,21 @@ const LeaveRequest = {
         );
       }
       
-      // Check if sufficient balance would exist (without deducting yet)
       const currentBalance = balance ? balance.balance : (leaveType.yearly_quota || 0);
       if (currentBalance < days) {
         console.error(`[LeaveRequest.create] Error: Insufficient leave balance. Required: ${days}, Available: ${currentBalance}`);
         throw new Error('Insufficient leave balance');
       }
         
-      await run('BEGIN TRANSACTION');
+      await run('BEGIN');
       try {
-        // console.log(`[LeaveRequest.create] Creating new leave request in database`);
         const result = await run(
-          'INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, reason, status, days) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, reason, status, days) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
           [validatedData.user_id, validatedData.leave_type_id, validatedData.start_date, validatedData.end_date, validatedData.reason, 'pending', days]
         );
 
-        // console.log(`[LeaveRequest.create] Successfully created leave request with ID: ${result.lastID}`);
-        
         await run('COMMIT');
-        return { ...validatedData, id: result.lastID, status: 'pending', days };
+        return { ...validatedData, id: result.rows[0].id, status: 'pending', days };
       } catch (error) {
         console.error('[LeaveRequest.create] Database error:', error.message);
         await run('ROLLBACK');
@@ -177,15 +147,16 @@ const LeaveRequest = {
 
   async getByUser(userId, { status, year, limit = 50, offset = 0 } = {}) {
     const params = [userId];
-    let whereClause = 'WHERE lr.user_id = ?';
+    let whereClause = 'WHERE lr.user_id = $1';
+    let paramIndex = 1;
     
     if (status) {
-      whereClause += ' AND lr.status = ?';
+      whereClause += ` AND lr.status = $${++paramIndex}`;
       params.push(status);
     }
     
     if (year) {
-      whereClause += ' AND strftime("%Y", lr.start_date) = ?';
+      whereClause += ` AND EXTRACT(YEAR FROM lr.start_date) = $${++paramIndex}`;
       params.push(year.toString());
     }
     
@@ -199,14 +170,14 @@ const LeaveRequest = {
        JOIN leave_types lt ON lr.leave_type_id = lt.id 
        ${whereClause}
        ORDER BY lr.created_at DESC
-       LIMIT ? OFFSET ?`,
+       LIMIT $${++paramIndex} OFFSET $${++paramIndex}`,
       params
     );
   },
 
   async getById(id) {
     const [row] = await query(
-      'SELECT * FROM leave_requests WHERE id = ?', 
+      'SELECT * FROM leave_requests WHERE id = $1', 
       [id]
     );
     return row || null;
@@ -225,43 +196,41 @@ const LeaveRequest = {
     
     const whereClauses = [];
     const params = [];
+    let paramIndex = 1;
     
     if (status) {
       if (Array.isArray(status)) {
         if (status.length > 0) {
-          const placeholders = status.map(() => '?').join(',');
+          const placeholders = status.map(() => `$${paramIndex++}`).join(',');
           whereClauses.push(`lr.status IN (${placeholders})`);
           params.push(...status);
         }
       } else {
-        whereClauses.push('lr.status = ?');
+        whereClauses.push(`lr.status = $${paramIndex++}`);
         params.push(status);
       }
     }
     
     if (userId) {
-      whereClauses.push('lr.user_id = ?');
+      whereClauses.push(`lr.user_id = $${paramIndex++}`);
       params.push(userId);
     }
     
     if (leaveTypeId) {
-      whereClauses.push('lr.leave_type_id = ?');
+      whereClauses.push(`lr.leave_type_id = $${paramIndex++}`);
       params.push(leaveTypeId);
     }
     
     if (year) {
-      // Use direct date comparison for better performance and accuracy
       const startDate = month 
         ? `${year}-${month.toString().padStart(2, '0')}-01`
         : `${year}-01-01`;
       const endDate = month
-        ? `${year}-${month.toString().padStart(2, '0')}-31`
+        ? new Date(year, month, 0).toISOString().split('T')[0] // last day of month
         : `${year}-12-31`;
         
-      whereClauses.push('(lr.start_date BETWEEN ? AND ? OR lr.end_date BETWEEN ? AND ?)');
+      whereClauses.push(`(lr.start_date BETWEEN $${paramIndex++} AND $${paramIndex++} OR lr.end_date BETWEEN $${paramIndex++} AND $${paramIndex++})`);
       params.push(startDate, endDate, startDate, endDate);
-      
-      // console.log('Date range filter:', { startDate, endDate });
     }
     
     const whereClause = whereClauses.length 
@@ -275,7 +244,7 @@ const LeaveRequest = {
       JOIN users u ON lr.user_id = u.id
       ${whereClause}
       ORDER BY lr.start_date DESC
-      LIMIT ? OFFSET ?
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
     
     return query(queryStr, [...params, limit, offset]);
@@ -294,29 +263,30 @@ const LeaveRequest = {
     
     const whereClauses = [];
     const params = [];
-    
+    let paramIndex = 1;
+
     if (status) {
-      whereClauses.push('lr.status = ?');
+      whereClauses.push(`lr.status = $${paramIndex++}`);
       params.push(status);
     }
     
     if (userId) {
-      whereClauses.push('lr.user_id = ?');
+      whereClauses.push(`lr.user_id = $${paramIndex++}`);
       params.push(userId);
     }
     
     if (leaveTypeId) {
-      whereClauses.push('lr.leave_type_id = ?');
+      whereClauses.push(`lr.leave_type_id = $${paramIndex++}`);
       params.push(leaveTypeId);
     }
     
     if (startDate) {
-      whereClauses.push('lr.start_date >= ?');
+      whereClauses.push(`lr.start_date >= $${paramIndex++}`);
       params.push(new Date(startDate).toISOString().split('T')[0]);
     }
     
     if (endDate) {
-      whereClauses.push('lr.end_date <= ?');
+      whereClauses.push(`lr.end_date <= $${paramIndex++}`);
       params.push(new Date(endDate).toISOString().split('T')[0]);
     }
     
@@ -348,7 +318,7 @@ const LeaveRequest = {
        LEFT JOIN users ab ON lr.approved_by = ab.id
        ${whereClause}
        ORDER BY lr.created_at DESC
-       LIMIT ? OFFSET ?`,
+       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
       [...params, limit, offset]
     );
   },
@@ -366,13 +336,11 @@ const LeaveRequest = {
       throw new Error('Only pending requests can be updated');
     }
 
-    await run('BEGIN TRANSACTION');
+    await run('BEGIN');
     try {
       const year = new Date(req.start_date).getFullYear();
       
-      // Handle status changes
       if (newStatus === 'approved') {
-        // Only check and deduct balance when approving
         const balanceRow = await LeaveBalance.get(req.user_id, req.leave_type_id, year);
         const currentBalance = (balanceRow && balanceRow.balance) || 0;
         
@@ -380,7 +348,6 @@ const LeaveRequest = {
           throw new Error('Insufficient leave balance');
         }
         
-        // Deduct the days from the balance
         await LeaveBalance.updateBalance(
           req.user_id, 
           req.leave_type_id, 
@@ -388,7 +355,6 @@ const LeaveRequest = {
           -req.days
         );
       } else if (req.status === 'approved' && newStatus !== 'approved') {
-        // If previously approved and now rejecting/cancelling, add back the days
         await LeaveBalance.updateBalance(
           req.user_id,
           req.leave_type_id,
@@ -399,10 +365,10 @@ const LeaveRequest = {
 
       await run(
         `UPDATE leave_requests 
-         SET status = ?, 
-             approved_by = ?, 
+         SET status = $1, 
+             approved_by = $2, 
              updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
+         WHERE id = $3`,
         [newStatus, processed_by, id]
       );
 
@@ -427,7 +393,7 @@ const LeaveRequest = {
     }
 
     await run(
-      'UPDATE leave_requests SET status = ? WHERE id = ?',
+      'UPDATE leave_requests SET status = $1 WHERE id = $2',
       ['cancelled', id]
     );
     
@@ -439,7 +405,7 @@ const LeaveRequest = {
       `SELECT lb.*, lt.name as leave_type_name 
        FROM leave_balances lb
        JOIN leave_types lt ON lb.leave_type_id = lt.id
-       WHERE lb.user_id = ? AND lb.year = ?`,
+       WHERE lb.user_id = $1 AND lb.year = $2`,
       [userId, year]
     );
     

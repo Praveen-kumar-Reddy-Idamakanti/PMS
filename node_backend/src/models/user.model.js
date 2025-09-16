@@ -1,80 +1,76 @@
 const bcrypt = require('bcryptjs');
-const { getDB } = require('../config/db');
+const { getDB, query, run } = require('../config/db');
 const logger = require('../utils/logger');
 
 class User {
     static async create(userData) {
         const { name, email, password, employeeId, role = 'user' } = userData; // Default role to 'user' if not provided
-        const db = getDB();
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        return new Promise((resolve, reject) => {
-            const stmt = db.prepare('INSERT INTO users (name, email, password, employee_id, role) VALUES (?, ?, ?, ?, ?)');
-            stmt.run(name, email, hashedPassword, employeeId, role, function (err) {
-                if (err) {
-                    console.error('Error creating user:', err);
-                    return reject(err);
-                }
-                resolve({ 
-                    id: this.lastID, 
-                    name, 
-                    email, 
-                    employee_id: employeeId,
-                    role 
-                });
-            });
-            stmt.finalize();
-        });
+        try {
+            const result = await run(
+                'INSERT INTO users (name, email, password, employee_id, role) VALUES ($1, $2, $3, $4, $5)',
+                [name, email, hashedPassword, employeeId, role]
+            );
+            
+            return { 
+                id: result.lastID || result.rows?.[0]?.id, 
+                name, 
+                email, 
+                employee_id: employeeId,
+                role 
+            };
+        } catch (error) {
+            console.error('Error creating user:', error);
+            throw error;
+        }
     }
 
-    static findByEmail(email) {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            db.get('SELECT id, name, email, password, role, employee_id FROM users WHERE email = ?', [email], (err, row) => {
-                if (err) {
-                    return reject(err);
-                }
-                // Ensure role has a default value if not set
-                if (row) {
-                    row.role = row.role || 'user';
-                }
-                resolve(row);
-            });
-        });
+    static async findByEmail(email) {
+        try {
+            const rows = await query('SELECT id, name, email, password, role, employee_id FROM users WHERE email = $1', [email]);
+            const row = rows[0] || null;
+            
+            // Ensure role has a default value if not set
+            if (row) {
+                row.role = row.role || 'user';
+            }
+            return row;
+        } catch (error) {
+            throw error;
+        }
     }
 
-    static findByEmployeeId(employeeId) {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            db.get('SELECT id, name, email, password, role, employee_id FROM users WHERE employee_id = ?', [employeeId], (err, row) => {
-                if (err) {
-                    return reject(err);
-                }
-                // Ensure role has a default value if not set
-                if (row) {
-                    row.role = row.role || 'user';
-                }
-                resolve(row);
-            });
-        });
+    static async findByEmployeeId(employeeId) {
+        try {
+            const rows = await query('SELECT id, name, email, password, role, employee_id FROM users WHERE employee_id = $1', [employeeId]);
+            const row = rows[0] || null;
+            
+            // Ensure role has a default value if not set
+            if (row) {
+                row.role = row.role || 'user';
+            }
+            return row;
+        } catch (error) {
+            throw error;
+        }
     }
 
-    static findById(id) {
-        const db = getDB();
-        return new Promise((resolve, reject) => {
-            db.get('SELECT id, name, email, role FROM users WHERE id = ?', [id], (err, row) => {
-                if (err) {
-                    return reject(err);
-                }
-                // Ensure role has a default value if not set
-                if (row) {
-                    row.role = row.role || 'user';
-                }
-                resolve(row);
-            });
-        });
+    static async findById(id) {
+        try {
+            const rows = await query('SELECT id, name, email, role FROM users WHERE id = $1', [id]);
+            const row = rows[0] || null;
+            
+            // Ensure role has a default value if not set
+            if (row) {
+                row.role = row.role || 'user';
+            }
+            return row;
+        } catch (error) {
+            throw error;
+        }
     }
 
     static async comparePassword(candidatePassword, hash) {

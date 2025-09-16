@@ -26,27 +26,27 @@ interface CalendarGridProps {
   
 const statusColors = {
   present: { 
-    bg: 'bg-[hsl(108,43%,55%)]', 
+    bg: 'bg-[hsl(108,43%,55%)]',
     text: 'text-[hsl(108,43%,55%)]' 
   },
   absent: { 
-    bg: 'bg-[hsl(348,83%,58%)]', 
+    bg: 'bg-[hsl(348,83%,58%)]',
     text: 'text-[hsl(348,83%,58%)]' 
   },
   leave: { 
-    bg: 'bg-[hsl(43,96%,58%)]', 
+    bg: 'bg-[hsl(43,96%,58%)]',
     text: 'text-[hsl(43,96%,58%)]' 
   },
   holiday: { 
-    bg: 'bg-[hsl(177,47%,55%)]', 
+    bg: 'bg-[hsl(177,47%,55%)]',
     text: 'text-[hsl(177,47%,55%)]' 
   },
   task_due: { 
-    bg: 'bg-[hsl(20,85%,60%)]', 
+    bg: 'bg-[hsl(20,85%,60%)]',
     text: 'text-white' 
   },
   future: { 
-    bg: 'bg-gray-200', 
+    bg: 'bg-gray-200',
     text: 'text-gray-500' 
   }
 } as const;
@@ -58,6 +58,14 @@ export default function CalendarGrid({
   onSelectDate,
   getStatusConfig,
 }: CalendarGridProps) {
+  // Debug logging
+  console.log(`[DEBUG][CalendarGrid] Component rendered with ${records.length} records`);
+  console.log(`[DEBUG][CalendarGrid] Records type: ${typeof records}, isArray: ${Array.isArray(records)}`);
+  if (records.length > 0) {
+    console.log(`[DEBUG][CalendarGrid] First 3 records:`, records.slice(0, 3));
+  } else {
+    console.log(`[DEBUG][CalendarGrid] No records received!`);
+  }
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -95,7 +103,6 @@ export default function CalendarGrid({
         key={index}
         className={cn(
           "w-2 h-2 rounded-full mx-auto",
-          colors.bg,
           "transition-all hover:scale-125"
         )}
         title={config.label}
@@ -129,13 +136,15 @@ export default function CalendarGrid({
         const isHoliday = dayEvents.some(e => e.status === 'holiday');
         const hasTask = dayEvents.some(e => e.status === 'task_due');
 
-        let dayStatus: string | null = null;
-        if (dayEvents.length > 0) {
-          if (dayEvents.some(e => e.status === 'task_due')) dayStatus = 'task_due';
-          else if (dayEvents.some(e => e.status === 'present')) dayStatus = 'present';
-          else if (dayEvents.some(e => e.status === 'absent')) dayStatus = 'absent';
-          else if (dayEvents.some(e => e.status === 'leave')) dayStatus = 'leave';
-          else if (dayEvents.some(e => e.status === 'holiday')) dayStatus = 'holiday';
+        // Get the status directly from records for this date
+        const dateStr = format(day, "yyyy-MM-dd");
+        const dayRecord = records.find((r) => r.date === dateStr);
+        const dayStatus = dayRecord?.status || null;
+        
+        // Debug logging for the first few days
+        if (day.getDate() <= 3) {
+          console.log(`[DEBUG][CalendarGrid] Date: ${dateStr}, Record:`, dayRecord, `Status: ${dayStatus}`);
+          console.log(`[DEBUG][CalendarGrid] Available records for this date:`, records.filter(r => r.date === dateStr));
         }
 
         const statusKey = dayStatus || 'future';
@@ -158,23 +167,32 @@ export default function CalendarGrid({
             <span className={cn(
               'inline-flex items-center justify-center rounded-full h-6 w-6',
               isSelected ? 'bg-blue-600 text-white' : 
-              hasTask ? 'bg-[hsl(20,85%,60%)] text-white' : colors.text,
-              isToday && !isSelected && !hasTask && 'border border-blue-500'
+              dayStatus ? colors.text : colors.text,
+              isToday && !isSelected && 'border border-blue-500'
             )}>
               {format(day, 'd')}
             </span>
 
             {/* Event dots below the date */}
             <div className="mt-1 space-y-1">
-              {dayEvents.slice(0, 3).map((event, idx) => getEventDot(event, idx))}
-              {dayEvents.length > 3 && (
-                <div className="text-xs text-muted-foreground text-center">+{dayEvents.length - 3}</div>
+              {dayStatus && (
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full mx-auto",
+                    statusColors[dayStatus as keyof typeof statusColors]?.bg || 'bg-gray-300',
+                    "transition-all hover:scale-125"
+                  )}
+                  title={getStatusConfig(dayStatus as CalendarDay["status"])?.label || dayStatus}
+                />
+              )}
+              {dayEvents.length > 1 && (
+                <div className="text-xs text-muted-foreground text-center">+{dayEvents.length - 1}</div>
               )}
             </div>
 
             {/* Task label if task_due exists */}
             {hasTask && (
-              <div className="mt-1 text-[9px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full font-medium">
+              <div className="mt-1 text-[9px] text-white bg-black/20 px-1.5 py-0.5 rounded-full font-medium">
                 {dayEvents.find(e => e.status === 'task_due')?.task_title || 'Task'}
               </div>
             )}

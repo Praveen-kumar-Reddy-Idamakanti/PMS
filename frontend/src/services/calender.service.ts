@@ -47,10 +47,26 @@ export async function fetchMonthlyCalendar(
   month: string,
   token: string
 ): Promise<CalendarDay[]> {
+  console.log(`[DEBUG][Service] fetchMonthlyCalendar called - userId: ${userId}, month: ${month}`);
+  
   const res = await fetchWithAuth(`/calendar/${userId}?month=${month}`, { // Using fetchWithAuth
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.json(); // fetchWithAuth returns Response object, need to parse JSON
+  
+  console.log(`[DEBUG][Service] Response status: ${res.status}, ok: ${res.ok}`);
+  
+  const data = await res.json(); // fetchWithAuth returns Response object, need to parse JSON
+  console.log(`[DEBUG][Service] fetchMonthlyCalendar response:`, data);
+  console.log(`[DEBUG][Service] Response type: ${typeof data}, isArray: ${Array.isArray(data)}`);
+  
+  if (Array.isArray(data)) {
+    console.log(`[DEBUG][Service] Array length: ${data.length}`);
+    if (data.length > 0) {
+      console.log(`[DEBUG][Service] First item:`, data[0]);
+    }
+  }
+  
+  return data;
 }
 
 export async function fetchDateDetails(
