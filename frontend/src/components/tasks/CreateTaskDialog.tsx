@@ -151,9 +151,10 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({ isOpen, onClose, on
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
               <SelectContent>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
-                ))}
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
               </SelectContent>
             </Select>
           </div>
