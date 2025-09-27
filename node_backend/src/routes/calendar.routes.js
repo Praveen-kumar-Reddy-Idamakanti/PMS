@@ -135,6 +135,11 @@ router.get('/:userId/:date', auth, async (req, res) => {
                                                     AND lr.status = 'approved'
                                                     LIMIT 1),
                                          'status', 'approved')
+                    WHEN EXISTS (SELECT 1 FROM "TaskCalendarEvents" tce WHERE tce.userId = ? AND date(tce.dueDate) = ?)
+                        THEN json_object('type', 'task_due',
+                                         'tasks', (SELECT json_group_array(
+                                                     json_object('task_id', tce.taskId, 'task_title', tce.title, 'task_description', tce.description)
+                                                   ) FROM "TaskCalendarEvents" tce WHERE tce.userId = ? AND date(tce.dueDate) = ?))
                     WHEN EXISTS (SELECT 1 FROM attendance a 
                                  WHERE a.user_id = ? 
                                  AND date(a.timestamp) = ?
@@ -161,7 +166,7 @@ router.get('/:userId/:date', auth, async (req, res) => {
                         )
                     ELSE json_object('type', 'absent')
                 END as data
-        `, [date, date, userId, date, userId, date, userId, date, userId, date]);
+        `, [date, date, userId, date, userId, date, userId, date, userId, date, userId, date, userId, date]);
 
         if (result.length === 0 || !result[0].data) {
             return res.json({ type: 'absent' });

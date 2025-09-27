@@ -8,13 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import taskService, { Task, Subtask, Tag } from '../../services/task.service';
 import { userService, User } from '../../services/user.service';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2, Edit, ArrowLeft, ChevronUp, ChevronDown, Calendar, AlertTriangle } from 'lucide-react'; // Added ChevronUp, ChevronDown, Calendar, AlertTriangle
+import { Plus, Trash2, Edit, ArrowLeft, ChevronUp, ChevronDown, Calendar, AlertTriangle, CheckCircle, XCircle, Plane, Clock, ClipboardList } from 'lucide-react'; // Added ChevronUp, ChevronDown, Calendar, AlertTriangle
+import { format } from 'date-fns'; // Added format function
 import SubtaskCompletionDescriptionDialog from '@/components/tasks/SubtaskCompletionDescriptionDialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext'; // Added
 import { useToast } from '@/components/ui/use-toast'; // Added
 import { createTaskCalendarEvent } from '../../services/calender.service'; // Added
+import CalendarGrid from '@/components/calender/CalendarGrid'; // Added
+import DateDetails from '@/components/calender/DateDetails'; // Added
+import { fetchMonthlyCalendar, fetchDateDetails, CalendarDay, DateDetail } from '../../services/calender.service'; // Added
 
 const TaskDetailPage: React.FC = () => { // Changed component name and props
   const { taskId } = useParams<{ taskId: string }>(); // Get taskId from URL
@@ -47,6 +51,82 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
 
   const [usersLoading, setUsersLoading] = useState(true);
 
+  // Calendar states
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarRecords, setCalendarRecords] = useState<CalendarDay[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [dateDetails, setDateDetails] = useState<DateDetail | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Calendar functions
+  const getStatusConfig = (status: CalendarDay["status"] | DateDetail["type"] | string) => {
+    switch (status) {
+      case "present":
+        return { 
+          color: "bg-green-100", 
+          textColor: "text-green-800", 
+          icon: CheckCircle, 
+          label: "Present" 
+        };
+      case "absent":
+        return { 
+          color: "bg-red-100", 
+          textColor: "text-red-800", 
+          icon: XCircle, 
+          label: "Absent" 
+        };
+      case "leave":
+        return { 
+          color: "bg-yellow-100", 
+          textColor: "text-yellow-800", 
+          icon: Plane, 
+          label: "Leave" 
+        };
+      case "holiday":
+        return { 
+          color: "bg-purple-100", 
+          textColor: "text-purple-800", 
+          icon: Clock, 
+          label: "Holiday" 
+        };
+      case "task_due":
+        return { 
+          color: "bg-blue-100", 
+          textColor: "text-blue-800", 
+          icon: ClipboardList, 
+          label: "Task Due" 
+        };
+      default:
+        return null;
+    }
+  };
+
+  const handleDateSelect = async (date: Date) => {
+    if (!user?.id) return;
+    
+    setSelectedDate(date);
+    try {
+      const dateStr = format(date, "yyyy-MM-dd");
+      const details = await fetchDateDetails(parseInt(user.id), dateStr, localStorage.getItem('token') || '');
+      setDateDetails(details);
+    } catch (error) {
+      console.error("Error fetching date details:", error);
+    }
+  };
+
+  const fetchCalendarData = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const month = format(currentDate, "yyyy-MM");
+      const token = localStorage.getItem('token') || '';
+      const data = await fetchMonthlyCalendar(parseInt(user.id), month, token);
+      setCalendarRecords(data);
+    } catch (error) {
+      console.error("Error fetching calendar data:", error);
+    }
+  };
+
   // Fetch users separately to ensure they're always loaded
   useEffect(() => {
     const fetchUsers = async () => {
@@ -62,6 +142,11 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
 
     fetchUsers();
   }, []);
+
+  // Fetch calendar data when component mounts or currentDate changes
+  useEffect(() => {
+    fetchCalendarData();
+  }, [currentDate, user?.id]);
 
   // Fetch task data
   useEffect(() => {
@@ -786,6 +871,80 @@ const TaskDetailPage: React.FC = () => { // Changed component name and props
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Calendar Section */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">Calendar View</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCalendar(!showCalendar)}
+          >
+            <Calendar className="h-4 w-4 mr-2" />
+            {showCalendar ? 'Hide Calendar' : 'Show Calendar'}
+          </Button>
+        </div>
+        
+        {showCalendar && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Calendar Grid */}
+            <div className="bg-card rounded-lg border p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-md font-medium text-foreground">
+                  {format(currentDate, 'MMMM yyyy')}
+                </h4>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
+                  >
+                    ←
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentDate(new Date())}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
+                  >
+                    →
+                  </Button>
+                </div>
+              </div>
+              <CalendarGrid
+                currentDate={currentDate}
+                records={calendarRecords}
+                selectedDate={selectedDate}
+                onSelectDate={handleDateSelect}
+                getStatusConfig={getStatusConfig}
+              />
+            </div>
+
+            {/* Date Details */}
+            <div className="bg-card rounded-lg border p-4">
+              {selectedDate ? (
+                <DateDetails
+                  date={selectedDate}
+                  details={dateDetails}
+                  getStatusConfig={getStatusConfig}
+                />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Click on a date to view details</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Subtask Completion Description Dialog */}
       <SubtaskCompletionDescriptionDialog

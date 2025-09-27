@@ -81,6 +81,38 @@ export default function DateDetails({ date, details, getStatusConfig }: DateDeta
             Holiday: {details.name || "Holiday"}
           </div>
         )}
+
+        {details.type === "task_due" && (
+          <div className="text-center text-sm">
+            <div className="font-medium mb-2">
+              {details.tasks && details.tasks.length > 1 
+                ? `${details.tasks.length} Tasks Due` 
+                : 'Task Due'
+              }
+            </div>
+            <div className="space-y-2">
+              {details.tasks && details.tasks.length > 0 ? (
+                // Multiple tasks
+                details.tasks.map((task, index) => (
+                  <div key={index} className="bg-blue-50 p-3 rounded-md">
+                    <p className="text-blue-800 font-medium">{task.task_title || "Task"}</p>
+                    {task.task_description && (
+                      <p className="text-blue-600 text-xs mt-1">{task.task_description}</p>
+                    )}
+                  </div>
+                ))
+              ) : (
+                // Single task (backward compatibility)
+                <div className="bg-blue-50 p-3 rounded-md">
+                  <p className="text-blue-800 font-medium">{details.task_title || "Task"}</p>
+                  {details.task_description && (
+                    <p className="text-blue-600 text-xs mt-1">{details.task_description}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {!details.type && isFutureDate && (
           <div className="text-center py-4">

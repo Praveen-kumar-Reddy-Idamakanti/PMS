@@ -171,12 +171,44 @@ export default function CalendarGrid({
               )}
             </div>
 
-            {/* Task label if task_due exists */}
-            {hasTask && (
-              <div className="mt-1 text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full">
-                Task
-              </div>
-            )}
+            {/* Task labels if task_due exists */}
+            {hasTask && (() => {
+              const taskEvents = dayEvents.filter(event => event.status === 'task_due');
+              const taskCount = taskEvents.length;
+              
+              if (taskCount === 1) {
+                // Single task - show full name
+                return (
+                  <div className="mt-1 text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full truncate max-w-[80px]">
+                    {taskEvents[0]?.task_title || 'Task'}
+                  </div>
+                );
+              } else if (taskCount === 2) {
+                // Two tasks - show both names
+                return (
+                  <div className="mt-1 space-y-0.5">
+                    <div className="text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full truncate max-w-[80px]">
+                      {taskEvents[0]?.task_title || 'Task 1'}
+                    </div>
+                    <div className="text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full truncate max-w-[80px]">
+                      {taskEvents[1]?.task_title || 'Task 2'}
+                    </div>
+                  </div>
+                );
+              } else {
+                // Multiple tasks - show first task + count
+                return (
+                  <div className="mt-1 space-y-0.5">
+                    <div className="text-[10px] text-white bg-[hsl(20,85%,60%)] px-1.5 py-0.5 rounded-full truncate max-w-[80px]">
+                      {taskEvents[0]?.task_title || 'Task'}
+                    </div>
+                    <div className="text-[9px] text-white bg-[hsl(20,85%,50%)] px-1 py-0.5 rounded-full text-center">
+                      +{taskCount - 1} more
+                    </div>
+                  </div>
+                );
+              }
+            })()}
           </button>
         );
       })}
