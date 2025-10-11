@@ -284,15 +284,94 @@ XMLHttpRequest.prototype.send = async function(body?: Document | XMLHttpRequestB
       return;
     }
     
+    // Handle common post-login API calls
+    if (this._url.includes('/dashboard') || this._url.includes('/stats')) {
+      const response = {
+        totalTasks: 5,
+        completedTasks: 2,
+        pendingTasks: 3,
+        attendance: { present: 20, absent: 2 },
+        leaveBalance: { annual: 18, sick: 9, personal: 5 }
+      };
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        console.log('Dashboard/Stats response:', response);
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
+    // Handle user profile calls
+    if (this._url.includes('/users/') && !this._url.includes('/users/profile')) {
+      const response = {
+        id: '1',
+        name: 'John Doe',
+        email: 'demo@mail.com',
+        employeeId: 'EMP001',
+        role: 'employee',
+        department: 'Engineering',
+        position: 'Software Developer'
+      };
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        console.log('User profile response:', response);
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
     // Catch-all for any other API calls
     console.log('Unhandled API call:', this._url, 'Method:', this._method);
-    const defaultResponse = { success: true, message: 'Mock response' };
+    
+    // Provide appropriate default responses based on URL pattern
+    let defaultResponse;
+    if (this._url.includes('/users/') || this._url.includes('/profile')) {
+      defaultResponse = {
+        id: '1',
+        name: 'John Doe',
+        email: 'demo@mail.com',
+        employeeId: 'EMP001',
+        role: 'employee',
+        department: 'Engineering',
+        position: 'Software Developer'
+      };
+    } else if (this._url.includes('/dashboard') || this._url.includes('/stats')) {
+      defaultResponse = {
+        totalTasks: 5,
+        completedTasks: 2,
+        pendingTasks: 3,
+        attendance: { present: 20, absent: 2 },
+        leaveBalance: { annual: 18, sick: 9, personal: 5 }
+      };
+    } else {
+      defaultResponse = { success: true, message: 'Mock response', data: [] };
+    }
     
     setTimeout(() => {
       Object.defineProperty(this, 'status', { value: 200 });
       Object.defineProperty(this, 'statusText', { value: 'OK' });
       Object.defineProperty(this, 'responseText', { value: JSON.stringify(defaultResponse) });
       Object.defineProperty(this, 'readyState', { value: 4 });
+      
+      console.log('Sending default response for:', this._url, defaultResponse);
       
       if (this.onreadystatechange) {
         this.onreadystatechange(new Event('readystatechange') as any);
