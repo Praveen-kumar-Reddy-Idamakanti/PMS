@@ -6,7 +6,8 @@
       "use": "@vercel/static-build",
       "config": {
         "distDir": "dist",
-        "installCommand": "npm install --legacy-peer-deps"
+        "installCommand": "npm install --legacy-peer-deps",
+        "buildCommand": "npm run build:demo"
       }
     }
   ],
@@ -16,7 +17,8 @@
   ],
   "build": {
     "env": {
-      "NODE_VERSION": "18.x"
+      "NODE_VERSION": "18.x",
+      "VITE_DEMO_MODE": "true"
     }
   }
 }
