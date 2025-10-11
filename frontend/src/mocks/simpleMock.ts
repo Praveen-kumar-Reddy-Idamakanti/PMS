@@ -63,45 +63,79 @@ export const mockApi = {
   }
 };
 
-// Intercept fetch requests
-const originalFetch = window.fetch;
-window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = typeof input === 'string' ? input : input.toString();
-  
+// Intercept XMLHttpRequest (used by Axios)
+const originalXHROpen = XMLHttpRequest.prototype.open;
+const originalXHRSend = XMLHttpRequest.prototype.send;
+
+XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...args: any[]) {
+  this._method = method;
+  this._url = url.toString();
+  return originalXHROpen.call(this, method, url, ...args);
+};
+
+XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
   // Check if this is a demo mode API call
-  if (import.meta.env.VITE_DEMO_MODE === 'true' && url.includes('/api/')) {
-    console.log('Intercepting API call:', url);
+  if (import.meta.env.VITE_DEMO_MODE === 'true' && this._url?.includes('/api/')) {
+    console.log('Intercepting API call:', this._url);
     
     // Handle login
-    if (url.includes('/auth/login') && init?.method === 'POST') {
-      const body = JSON.parse(init.body as string);
-      const response = await mockApi.login(body);
-      return new Response(JSON.stringify(response), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (this._url.includes('/auth/login') && this._method === 'POST') {
+      const credentials = JSON.parse(body as string);
+      const response = mockApi.login(credentials);
+      
+      // Simulate successful response
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
     }
     
     // Handle other API calls
-    if (url.includes('/tasks')) {
-      const response = await mockApi.getTasks();
-      return new Response(JSON.stringify(response), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (this._url.includes('/tasks')) {
+      const response = mockApi.getTasks();
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
     }
     
-    if (url.includes('/events')) {
-      const response = await mockApi.getEvents();
-      return new Response(JSON.stringify(response), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (this._url.includes('/events')) {
+      const response = mockApi.getEvents();
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
     }
   }
   
-  // For non-demo or non-API calls, use original fetch
-  return originalFetch(input, init);
+  // For non-demo or non-API calls, use original send
+  return originalXHRSend.call(this, body);
 };
 
-console.log('Simple mock API interceptor loaded');
+console.log('Simple mock API interceptor loaded (XMLHttpRequest)');
