@@ -23,7 +23,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:demo": "cross-env VITE_DEMO_MODE=true vite build",
-    "postinstall": "npm install --legacy-peer-deps && npm run build",
+    "postinstall": "npm install --legacy-peer-deps",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
