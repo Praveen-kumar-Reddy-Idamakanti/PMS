@@ -27,7 +27,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "preview:demo": "cross-env VITE_DEMO_MODE=true vite preview",
-    "vercel-build": "npm install --legacy-peer-deps && npm run build"
+    "vercel-build": "npm install --legacy-peer-deps && npm run build:demo"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
