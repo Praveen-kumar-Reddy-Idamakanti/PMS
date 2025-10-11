@@ -1,15 +1,24 @@
-node_modules/
-.gitignore
-.git
+# Ignore backend files
+../node_backend
+../Rocket.Chat
+../Rocket.Chat.Electron
+../data
+../uploads
+../project
+../README.md
+../todo.txt
+../things_to_remember.txt
+../what i have done today
+../ecosystem.config.js
+../delete-db.js
+../node_backend.zip
+
+# Ignore development files
+node_modules
 .env.local
-*.md
-*.log
-.cache
-.vscode
-.DS_Store
-build/
-coverage/
-*.test.*
-*.spec.*
-__tests__/
-cypress/
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
