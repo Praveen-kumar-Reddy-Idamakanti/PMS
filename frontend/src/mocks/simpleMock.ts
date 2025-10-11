@@ -132,6 +132,153 @@ XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyIni
       
       return;
     }
+    
+    // Handle user profile
+    if (this._url.includes('/users/profile')) {
+      const response = {
+        id: '1',
+        name: 'John Doe',
+        email: 'demo@mail.com',
+        employeeId: 'EMP001',
+        role: 'employee',
+        department: 'Engineering',
+        position: 'Software Developer'
+      };
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
+    // Handle attendance
+    if (this._url.includes('/attendance')) {
+      const response = [
+        {
+          id: '1',
+          userId: '1',
+          date: new Date().toISOString().split('T')[0],
+          checkIn: '09:00:00',
+          checkOut: null,
+          status: 'present',
+          totalHours: 0
+        }
+      ];
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
+    // Handle leave balances
+    if (this._url.includes('/leave-balances')) {
+      const response = {
+        annual: 20,
+        sick: 10,
+        personal: 5,
+        used: {
+          annual: 2,
+          sick: 1,
+          personal: 0
+        }
+      };
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
+    // Handle leave requests
+    if (this._url.includes('/leave-requests')) {
+      const response = [];
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
+    // Handle admin settings
+    if (this._url.includes('/admin/settings')) {
+      const response = {
+        companyName: 'Demo Company',
+        workingHours: 8,
+        timezone: 'UTC'
+      };
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
+    
+    // Handle activity logs
+    if (this._url.includes('/activity-logs')) {
+      const response = [
+        {
+          id: '1',
+          userId: '1',
+          action: 'login',
+          description: 'User logged in successfully',
+          timestamp: new Date().toISOString()
+        }
+      ];
+      
+      setTimeout(() => {
+        Object.defineProperty(this, 'status', { value: 200 });
+        Object.defineProperty(this, 'statusText', { value: 'OK' });
+        Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
+        Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        if (this.onreadystatechange) {
+          this.onreadystatechange(new Event('readystatechange') as any);
+        }
+      }, 100);
+      
+      return;
+    }
   }
   
   // For non-demo or non-API calls, use original send
