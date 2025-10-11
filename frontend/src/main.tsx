@@ -13,19 +13,32 @@ async function enableMSW() {
         serviceWorker: {
           url: '/mockServiceWorker.js',
         },
+        waitUntilReady: true,
       });
       console.log('MSW started successfully');
     } catch (error) {
       console.error('Failed to start MSW:', error);
+      // Continue without MSW if it fails
     }
   }
 }
 
 // Initialize MSW and then render the app
-enableMSW().then(() => {
-  createRoot(document.getElementById("root")!).render(
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
-  );
-});
+enableMSW()
+  .then(() => {
+    console.log('App starting...');
+    createRoot(document.getElementById("root")!).render(
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    );
+  })
+  .catch((error) => {
+    console.error('Failed to initialize app:', error);
+    // Render app anyway
+    createRoot(document.getElementById("root")!).render(
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    );
+  });
