@@ -73,7 +73,7 @@ XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...a
   return originalXHROpen.call(this, method, url, ...args);
 };
 
-XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
+XMLHttpRequest.prototype.send = async function(body?: Document | XMLHttpRequestBodyInit | null) {
   // Check if this is a demo mode API call
   if (import.meta.env.VITE_DEMO_MODE === 'true' && this._url?.includes('/api/')) {
     console.log('Intercepting API call:', this._url);
@@ -81,7 +81,9 @@ XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyIni
     // Handle login
     if (this._url.includes('/auth/login') && this._method === 'POST') {
       const credentials = JSON.parse(body as string);
-      const response = mockApi.login(credentials);
+      const response = await mockApi.login(credentials);
+      
+      console.log('Mock login response:', response);
       
       // Simulate successful response
       setTimeout(() => {
@@ -89,6 +91,8 @@ XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyIni
         Object.defineProperty(this, 'statusText', { value: 'OK' });
         Object.defineProperty(this, 'responseText', { value: JSON.stringify(response) });
         Object.defineProperty(this, 'readyState', { value: 4 });
+        
+        console.log('Sending mock response to app:', response);
         
         if (this.onreadystatechange) {
           this.onreadystatechange(new Event('readystatechange') as any);
@@ -279,6 +283,23 @@ XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyIni
       
       return;
     }
+    
+    // Catch-all for any other API calls
+    console.log('Unhandled API call:', this._url, 'Method:', this._method);
+    const defaultResponse = { success: true, message: 'Mock response' };
+    
+    setTimeout(() => {
+      Object.defineProperty(this, 'status', { value: 200 });
+      Object.defineProperty(this, 'statusText', { value: 'OK' });
+      Object.defineProperty(this, 'responseText', { value: JSON.stringify(defaultResponse) });
+      Object.defineProperty(this, 'readyState', { value: 4 });
+      
+      if (this.onreadystatechange) {
+        this.onreadystatechange(new Event('readystatechange') as any);
+      }
+    }, 100);
+    
+    return;
   }
   
   // For non-demo or non-API calls, use original send
